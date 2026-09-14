@@ -18,6 +18,7 @@ class Chunk(BaseModel):
     version: str = "1"
     source_system: str = "local_files"
     source_ref: str = ""
+    source_url: str = ""
 
 
 FRONT_MATTER = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
@@ -43,6 +44,7 @@ def load_corpus(knowledge_dir: Path) -> list[Chunk]:
             "version": str(meta.get("version", "1")),
             "source_system": meta.get("source_system", "local_files"),
             "source_ref": str(path.relative_to(knowledge_dir.parent)),
+            "source_url": meta.get("source_url", ""),
         }
 
         # Split into sections on '##' headings; pre-heading text = section "Overview".

@@ -38,7 +38,7 @@ class KnowledgeSearchTool:
             document_id=chunk.document_id,
             title=chunk.title,
             source_system=chunk.source_system,
-            source_ref=chunk.source_ref,
+            source_ref=chunk.source_url or chunk.source_ref,
             page_section=chunk.section,
             chunk_id=chunk.chunk_id,
             excerpt=chunk.text[:300],
