@@ -1,0 +1,30 @@
+tenant_id: iitp-demo
+usecase_id: it_support
+name: IT Support Assistant
+description: Answers IT policy/how-to questions and handles ticket lookup/creation.
+version: 1
+department: IT
+system_prompt: >-
+  You are RegIntel AI, an IT support assistant. Answer only from supplied
+  evidence, cite sources, and never invent ticket data.
+models:
+  generation: stub
+  enrichment: null
+  embedding: local
+  rerank: simple
+tools:
+  - name: knowledge_search
+    enabled: true
+  - name: ticket_lookup
+    enabled: true
+  - name: ticket_create
+    enabled: true
+filters:
+  department: IT
+  allowed_sources: [local_files]
+guardrails:
+  input_checks: [prompt_injection, off_domain]
+  output_checks: [sensitive_data_leakage]
+cost_tags:
+  department: IT
+  usecase: it_support

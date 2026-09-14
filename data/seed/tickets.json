@@ -1,0 +1,5 @@
+[
+  {"ticket_id": "TCK-1001", "employee_id": "e001", "category": "vpn", "description": "Cannot connect to corporate VPN from home", "status": "open", "priority": "high", "created_at": "2026-09-10T09:15:00+00:00", "updated_at": "2026-09-10T09:15:00+00:00"},
+  {"ticket_id": "TCK-1002", "employee_id": "e001", "category": "hardware", "description": "Laptop battery drains within one hour", "status": "resolved", "priority": "medium", "created_at": "2026-09-05T14:40:00+00:00", "updated_at": "2026-09-07T11:02:00+00:00"},
+  {"ticket_id": "TCK-1003", "employee_id": "e002", "category": "access", "description": "Need read access to HR analytics workspace", "status": "open", "priority": "medium", "created_at": "2026-09-11T10:05:00+00:00", "updated_at": "2026-09-11T10:05:00+00:00"}
+]

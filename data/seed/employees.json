@@ -1,0 +1,5 @@
+[
+  {"employee_id": "e001", "name": "Asha Verma", "department": "IT", "email": "asha.verma@example.com", "roles": ["employee"]},
+  {"employee_id": "e002", "name": "Rahul Nair", "department": "HR", "email": "rahul.nair@example.com", "roles": ["employee"]},
+  {"employee_id": "e999", "name": "Admin Demo", "department": "IT", "email": "admin@example.com", "roles": ["employee", "admin"]}
+]

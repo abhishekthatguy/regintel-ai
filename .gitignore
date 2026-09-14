@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/*.db
+data/*.db-journal
+.pytest_cache/
+.ruff_cache/
+.streamlit/secrets.toml
+dist/
+build/
+*.egg-info/

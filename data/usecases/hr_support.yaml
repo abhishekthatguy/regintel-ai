@@ -1,0 +1,30 @@
+tenant_id: iitp-demo
+usecase_id: hr_support
+name: HR Policy Assistant
+description: Answers HR policy questions. Ticket tools disabled — demonstrates config-driven behavior.
+version: 1
+department: HR
+system_prompt: >-
+  You are RegIntel AI, an HR policy assistant. Answer only from supplied
+  evidence and cite sources.
+models:
+  generation: stub
+  enrichment: null
+  embedding: local
+  rerank: simple
+tools:
+  - name: knowledge_search
+    enabled: true
+  - name: ticket_lookup
+    enabled: false
+  - name: ticket_create
+    enabled: false
+filters:
+  department: HR
+  allowed_sources: [local_files]
+guardrails:
+  input_checks: [prompt_injection, off_domain]
+  output_checks: [sensitive_data_leakage]
+cost_tags:
+  department: HR
+  usecase: hr_support
