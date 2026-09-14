@@ -1,4 +1,4 @@
-"""RegIntel AI — Streamlit demo UI (Phase 0 walking skeleton).
+"""RegIntel AI — Streamlit demo UI (Phase 1 agentic core).
 
 Run: .venv/bin/streamlit run ui/streamlit_app.py
 Requires the API: .venv/bin/uvicorn app.main:app
@@ -15,7 +15,21 @@ EMPLOYEES = {"e001 — Asha Verma (IT)": "e001", "e002 — Rahul Nair (HR)": "e0
 USECASES = {"IT Support": "it_support", "HR Policy": "hr_support"}
 
 st.set_page_config(page_title="RegIntel AI", page_icon="🤖")
-st.title("RegIntel AI — Phase 0 Demo")
+st.title("RegIntel AI")
+
+
+def headers(employee_id: str) -> dict:
+    return {"X-Demo-Employee": employee_id}
+
+
+def send_feedback(message_id: str, rating: str, employee_id: str) -> None:
+    httpx.post(
+        f"{API_BASE}/v1/messages/{message_id}/feedback",
+        headers=headers(employee_id),
+        json={"rating": rating},
+        timeout=10,
+    )
+
 
 with st.sidebar:
     st.header("Session")
@@ -32,9 +46,7 @@ with st.sidebar:
     st.subheader("Conversations")
     try:
         convs = httpx.get(
-            f"{API_BASE}/v1/conversations",
-            headers={"X-Demo-Employee": employee_id},
-            timeout=10,
+            f"{API_BASE}/v1/conversations", headers=headers(employee_id), timeout=10
         ).json()
     except Exception:
         convs = []
@@ -45,13 +57,16 @@ with st.sidebar:
     if options[picked] and options[picked] != st.session_state.get("conversation_id"):
         conv_id = options[picked]
         detail = httpx.get(
-            f"{API_BASE}/v1/conversations/{conv_id}",
-            headers={"X-Demo-Employee": employee_id},
-            timeout=10,
+            f"{API_BASE}/v1/conversations/{conv_id}", headers=headers(employee_id), timeout=10
         ).json()
         st.session_state.conversation_id = conv_id
         st.session_state.messages = [
-            {"role": m["role"], "content": m["content"], "correlation_id": m.get("correlation_id")}
+            {
+                "role": m["role"],
+                "content": m["content"],
+                "citations": m.get("citations", []),
+                "message_id": m["message_id"],
+            }
             for m in detail["messages"]
         ]
         st.rerun()
@@ -61,39 +76,52 @@ if "messages" not in st.session_state:
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = None
 
-headers = {"X-Demo-Employee": employee_id}
-
-
-def api_get(path: str):
-    return httpx.get(f"{API_BASE}{path}", headers=headers, timeout=10)
-
-
-def api_post(path: str, payload: dict):
-    return httpx.post(f"{API_BASE}{path}", headers=headers, json=payload, timeout=30)
-
-
 try:
-    ready = api_get("/ready").json()
+    ready = httpx.get(f"{API_BASE}/ready", timeout=10).json()
     if not ready.get("ready"):
         st.warning(f"API not fully ready: {ready}")
 except Exception:
     st.error(f"Cannot reach API at {API_BASE}. Start it with: .venv/bin/uvicorn app.main:app")
     st.stop()
 
-for msg in st.session_state.messages:
+
+def render_message(msg: dict, idx: int) -> None:
     with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-        if msg.get("correlation_id"):
-            with st.expander("debug"):
-                st.code(f"correlation_id: {msg['correlation_id']}")
+        st.markdown(msg["content"])
+        for c in msg.get("citations", []):
+            with st.expander(f"[{c['citation_id']}] {c['title']} — {c.get('page_section') or ''}"):
+                st.caption(
+                    f"{c['source_system']} · {c.get('source_ref') or ''} · v{c.get('document_version')}"
+                )
+                if c.get("excerpt"):
+                    st.write(c["excerpt"])
+                if c.get("retrieval_score") is not None:
+                    st.caption(f"score: {c['retrieval_score']}")
+        if msg["role"] == "assistant" and msg.get("message_id"):
+            col1, col2, _ = st.columns([0.07, 0.07, 0.86])
+            if col1.button("👍", key=f"up{idx}"):
+                send_feedback(msg["message_id"], "up", employee_id)
+                st.toast("Feedback recorded")
+            if col2.button("👎", key=f"down{idx}"):
+                send_feedback(msg["message_id"], "down", employee_id)
+                st.toast("Feedback recorded")
+
+
+for i, msg in enumerate(st.session_state.messages):
+    render_message(msg, i)
 
 if prompt := st.chat_input("Ask something…"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt, "citations": []})
     with st.chat_message("user"):
         st.write(prompt)
 
     if st.session_state.conversation_id is None:
-        resp = api_post("/v1/conversations", {"usecase_id": usecase_id})
+        resp = httpx.post(
+            f"{API_BASE}/v1/conversations",
+            headers=headers(employee_id),
+            json={"usecase_id": usecase_id},
+            timeout=30,
+        )
         if resp.status_code != 201:
             st.error(f"Failed to create conversation: {resp.text}")
             st.stop()
@@ -102,41 +130,55 @@ if prompt := st.chat_input("Ask something…"):
     with st.chat_message("assistant"):
         status_box = st.empty()
         answer_box = st.empty()
-        answer, usage, correlation_id, error = "", None, None, None
+        answer, usage, citations, message_id = "", None, [], None
+        seen_nodes: list[str] = []
 
         with httpx.stream(
             "POST",
             f"{API_BASE}/v1/conversations/{st.session_state.conversation_id}/messages:stream",
-            headers=headers,
+            headers=headers(employee_id),
             json={"content": prompt},
             timeout=60,
         ) as stream:
-            correlation_id = stream.headers.get("x-correlation-id")
             for line in stream.iter_lines():
                 if not line:
                     continue
                 event = json.loads(line)
                 match event["type"]:
                     case "status":
-                        status_box.caption(f"⚙️ {event['data']['stage']}: {event['data'].get('detail', '')}")
+                        node = event["data"].get("detail", "")
+                        if node and node not in seen_nodes:
+                            seen_nodes.append(node)
+                        status_box.caption("⚙️ " + " → ".join(seen_nodes))
                     case "token":
                         answer += event["data"]["text"]
-                        answer_box.write(answer)
+                        answer_box.markdown(answer)
+                    case "citation":
+                        citations.append(event["data"])
                     case "usage":
                         usage = event["data"]
-                    case "error":
-                        error = event["data"]["message"]
-                        st.error(error)
                     case "complete":
-                        pass
+                        message_id = event["data"]["message_id"]
+                    case "error":
+                        st.error(event["data"]["message"])
 
         status_box.empty()
-        if not error and usage:
+        for c in citations:
+            with st.expander(f"[{c['citation_id']}] {c['title']} — {c.get('page_section') or ''}"):
+                st.caption(
+                    f"{c['source_system']} · {c.get('source_ref') or ''} · v{c.get('document_version')}"
+                )
+                if c.get("excerpt"):
+                    st.write(c["excerpt"])
+        if usage:
             st.caption(f"model={usage['model']} · tokens={usage['total_tokens']} · {usage['latency_ms']}ms")
-        if correlation_id:
-            with st.expander("debug"):
-                st.code(f"correlation_id: {correlation_id}")
 
         st.session_state.messages.append(
-            {"role": "assistant", "content": answer or error, "correlation_id": correlation_id}
+            {
+                "role": "assistant",
+                "content": answer,
+                "citations": citations,
+                "message_id": message_id,
+            }
         )
+        st.rerun()

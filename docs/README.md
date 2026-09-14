@@ -20,8 +20,8 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 
 | Phase | Name | End-to-end slice delivered |
 |---|---|---|
-| [0](phases/phase-0-foundation.md) | Foundation / Walking Skeleton | Thin request path: UI → API → stub agent → persisted response |
-| [1](phases/phase-1-agentic-core.md) | Local Agentic Core (IIT baseline) | Streamlit + LangGraph + 3 tools + SQLite; full local demo |
+| [0](phases/phase-0-foundation.md) | Foundation / Walking Skeleton ✅ | Thin request path: UI → API → stub agent → persisted response |
+| [1](phases/phase-1-agentic-core.md) | Local Agentic Core (IIT baseline) ✅ | Streamlit + LangGraph + 3 tools + SQLite; full local demo |
 | [2](phases/phase-2-retrieval-grounding.md) | Retrieval & Grounding | Real ingestion, chunking, embeddings, hybrid search, rerank, citations |
 | [3](phases/phase-3-security-cloud.md) | Security & Cloud | Entra ID/JWT, FastAPI streaming, DynamoDB, Redis, guardrails, AWS deploy |
 | [4](phases/phase-4-experience.md) | Production Experience | Angular 21 UI, streaming UX, feedback, multilingual, analytics |

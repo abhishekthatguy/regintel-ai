@@ -1,0 +1,445 @@
+"""LangGraph agent — Phase 1 implementation of the BRD §9 node spec.
+
+Topology:
+  initialize -> classify -> {direct->generate, knowledge->build_filters->retrieve->generate,
+    ticket_lookup, ticket_create->(clarify|duplicate_check->(confirm_action|respond)),
+    confirm->ticket_create, cancel/reconfirm->respond}
+  all paths -> guardrail -> respond -> END
+  node failures -> error_handler -> guardrail
+
+Multi-turn state (pending_action, history, last_topic) persists via SqliteSaver
+keyed on thread_id = conversation_id.
+"""
+
+import dataclasses
+import logging
+import time
+from typing import Any, TypedDict
+
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.graph import END, START, StateGraph
+
+from app.guardrails.checks import check_input, check_output
+from app.llm.base import (
+    INTENT_CANCEL,
+    INTENT_CONFIRM,
+    INTENT_DIRECT,
+    INTENT_KNOWLEDGE,
+    INTENT_TICKET_CREATE,
+    INTENT_TICKET_LOOKUP,
+)
+from app.llm.local import FOLLOWUP_RE
+from app.schemas.config import UseCaseConfig
+from app.schemas.conversation import Citation
+from app.tools.base import ToolContext
+from app.tools.knowledge import KnowledgeSearchTool
+from app.tools.tickets import TicketCreateTool, TicketLookupTool, validate_fields
+
+logger = logging.getLogger(__name__)
+
+
+class GraphState(TypedDict, total=False):
+    user_message: str
+    user: dict[str, Any]
+    usecase: dict[str, Any]
+    history: list[dict[str, str]]
+    intent: str
+    fields: dict[str, Any]
+    missing: list[str]
+    duplicate: bool
+    filters: dict[str, Any]
+    pending_action: dict[str, Any] | None
+    evidence: list[dict[str, Any]]
+    citations: list[dict[str, Any]]
+    answer: str
+    usage: dict[str, Any]
+    error: str | None
+    last_topic: str
+
+
+def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
+    """Compile the agent graph. ctx supplies tools/stores/index; model is the
+    ChatModel implementation; checkpointer provides multi-turn memory."""
+
+    knowledge_tool = KnowledgeSearchTool()
+    lookup_tool = TicketLookupTool()
+    create_tool = TicketCreateTool()
+
+    def req_ctx(state: GraphState) -> ToolContext:
+        """Request-scoped tool context: shared stores/index + this turn's user.
+        ctx itself is built once per use case and must never carry user data."""
+        from app.schemas.identity import UserContext
+
+        return dataclasses.replace(ctx, user=UserContext.model_validate(state["user"]))
+
+    def node(name):
+        def deco(fn):
+            def wrapped(state: GraphState) -> dict:
+                logger.info("node", extra={"action": "node", "outcome": name})
+                return fn(state)
+
+            return wrapped
+
+        return deco
+
+    @node("initialize")
+    def initialize(state: GraphState) -> dict:
+        result = check_input(state["user_message"])
+        if not result.allowed:
+            return {
+                "answer": model.respond("refusal"),
+                "error": f"input_blocked:{result.reason}",
+                "history": state.get("history", []),
+            }
+        return {"error": None, "history": state.get("history", [])}
+
+    INTENT_TOOL = {
+        INTENT_KNOWLEDGE: "knowledge_search",
+        INTENT_TICKET_LOOKUP: "ticket_lookup",
+        INTENT_TICKET_CREATE: "ticket_create",
+    }
+
+    @node("classify")
+    def classify(state: GraphState) -> dict:
+        context = {"pending_action": state.get("pending_action"), "history": state.get("history", [])}
+        intent = model.classify(state["user_message"], context)
+
+        # Tool allowlist is enforced server-side from use-case config —
+        # a disabled tool can never execute regardless of the request.
+        required_tool = INTENT_TOOL.get(intent)
+        if required_tool and required_tool not in ctx.usecase.enabled_tools():
+            available = ", ".join(ctx.usecase.enabled_tools()) or "nothing yet"
+            return {
+                "intent": INTENT_DIRECT,
+                "answer": model.respond("tool_disabled", available=available),
+            }
+
+        update: dict = {"intent": intent}
+
+        if intent == INTENT_CANCEL and state.get("pending_action"):
+            update["pending_action"] = None
+            update["answer"] = model.respond("cancelled")
+        elif intent == INTENT_TICKET_CREATE:
+            fields = model.extract_fields(state["user_message"], state.get("fields", {}))
+            clean, missing = validate_fields(fields)
+            update["fields"] = clean
+            update["missing"] = missing
+            update["pending_action"] = {
+                "action_type": "ticket_create",
+                "collected_fields": clean,
+                "missing_fields": missing,
+                "awaiting_confirmation": False,
+            }
+        return update
+
+    @node("clarify")
+    def clarify(state: GraphState) -> dict:
+        missing = state.get("missing") or state["pending_action"]["missing_fields"]
+        return {"answer": model.respond("clarify", missing=", ".join(missing))}
+
+    @node("build_filters")
+    def build_filters(state: GraphState) -> dict:
+        department = ctx.usecase.filters.department
+        return {"filters": {"department": department, "acl_enforced": True}}
+
+    @node("retrieve")
+    def retrieve(state: GraphState) -> dict:
+        try:
+            query = state["user_message"]
+            if (FOLLOWUP_RE.match(query) or len(query.split()) <= 3) and state.get("last_topic"):
+                query = f"{state['last_topic']} {query}"
+            result = knowledge_tool.run(req_ctx(state), query)
+            if not result["found"]:
+                return {
+                    "answer": model.respond("not_found"),
+                    "evidence": [],
+                    "citations": [],
+                }
+            return {
+                "evidence": [
+                    {"chunk": item["chunk"].model_dump(mode="json"), "score": item["score"]}
+                    for item in result["evidence"]
+                ],
+                "citations": [c.model_dump(mode="json") for c in result["citations"]],
+                "last_topic": result["evidence"][0]["chunk"].title,
+            }
+        except Exception as exc:
+            return {"error": f"knowledge_search:{exc}"}
+
+    @node("ticket_lookup")
+    def ticket_lookup(state: GraphState) -> dict:
+        try:
+            result = lookup_tool.run(req_ctx(state))
+            if not result["found"]:
+                return {"answer": model.respond("ticket_none", scope="")}
+            lines = ["Here are your tickets:\n"]
+            for t in result["tickets"]:
+                lines.append(
+                    f"- **{t['ticket_id']}** · {t['category']} · {t['status']} · "
+                    f"{t['priority']} — {t['description']}"
+                )
+            return {"answer": model.respond("ticket_list", lines="\n".join(lines))}
+        except Exception as exc:
+            return {"error": f"ticket_lookup:{exc}"}
+
+    @node("duplicate_check")
+    def duplicate_check(state: GraphState) -> dict:
+        try:
+            fields = state["pending_action"]["collected_fields"]
+            dup = req_ctx(state).store.find_duplicate_ticket(
+                req_ctx(state).user.employee_id, fields["category"]
+            )
+            if dup:
+                return {
+                    "answer": model.respond(
+                        "duplicate",
+                        ticket_id=dup["ticket_id"],
+                        category=dup["category"],
+                        status=dup["status"],
+                        priority=dup["priority"],
+                        description=dup["description"],
+                    ),
+                    "pending_action": None,
+                    "fields": {},
+                    "duplicate": True,
+                }
+            return {"duplicate": False}
+        except Exception as exc:
+            return {"error": f"duplicate_check:{exc}"}
+
+    @node("confirm_action")
+    def confirm_action(state: GraphState) -> dict:
+        pending = dict(state["pending_action"])
+        pending["awaiting_confirmation"] = True
+        fields = pending["collected_fields"]
+        return {
+            "pending_action": pending,
+            "answer": model.respond(
+                "confirm",
+                category=fields["category"],
+                priority=fields.get("priority", "medium"),
+                description=fields["description"],
+            ),
+        }
+
+    @node("ticket_create")
+    def ticket_create(state: GraphState) -> dict:
+        try:
+            pending = state.get("pending_action") or {}
+            fields, missing = validate_fields(pending.get("collected_fields", {}))
+            if missing:
+                return {
+                    "answer": model.respond("clarify", missing=", ".join(missing)),
+                    "pending_action": {**pending, "missing_fields": missing, "awaiting_confirmation": False},
+                }
+            rctx = req_ctx(state)
+            dup = rctx.store.find_duplicate_ticket(rctx.user.employee_id, fields["category"])
+            if dup:
+                return {
+                    "answer": model.respond(
+                        "duplicate",
+                        ticket_id=dup["ticket_id"],
+                        category=dup["category"],
+                        status=dup["status"],
+                        priority=dup["priority"],
+                        description=dup["description"],
+                    ),
+                    "pending_action": None,
+                    "fields": {},
+                }
+            idem = f"{rctx.user.employee_id}:{fields['category']}:{fields['description'][:40]}"
+            result = create_tool.run(rctx, fields, idempotency_key=idem)
+            ticket = result["ticket"]
+            return {
+                "answer": model.respond(
+                    "created",
+                    ticket_id=ticket["ticket_id"],
+                    category=ticket["category"],
+                    priority=ticket["priority"],
+                ),
+                "pending_action": None,
+                "fields": {},
+            }
+        except Exception as exc:
+            return {"error": f"ticket_create:{exc}"}
+
+    @node("generate")
+    def generate(state: GraphState) -> dict:
+        if state.get("intent") == INTENT_DIRECT:
+            return {"answer": model.respond("greeting", name=state["user"]["name"].split()[0])}
+        if state.get("answer"):
+            return {}  # not_found etc. already composed upstream
+        return {"answer": model.generate_grounded(state.get("evidence", []))}
+
+    @node("guardrail")
+    def guardrail(state: GraphState) -> dict:
+        result = check_output(state.get("answer", ""))
+        if not result.allowed:
+            return {"answer": model.respond("refusal"), "error": f"output_blocked:{result.reason}"}
+        return {}
+
+    @node("error_handler")
+    def error_handler(state: GraphState) -> dict:
+        tool = (state.get("error") or "tool").split(":")[0]
+        if state.get("error", "").startswith(("input_blocked", "output_blocked")):
+            return {}  # refusal answer already set
+        return {"answer": model.respond("tool_error", tool=tool)}
+
+    @node("respond")
+    def respond(state: GraphState) -> dict:
+        history = state.get("history", []) + [
+            {"role": "user", "content": state["user_message"]},
+            {"role": "assistant", "content": state.get("answer", "")},
+        ]
+        usage = {
+            "model": ctx.usecase.models.generation,
+            "prompt_tokens": len(state["user_message"].split()) + 20 * len(history),
+            "completion_tokens": len(state.get("answer", "").split()),
+            "total_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "latency_ms": 0.0,
+        }
+        usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+        return {"history": history[-40:], "usage": usage}
+
+    # --- routing -----------------------------------------------------------
+
+    def route_initialize(state: GraphState) -> str:
+        return "guardrail" if (state.get("error") or "").startswith("input_blocked") else "classify"
+
+    def route_classify(state: GraphState) -> str:
+        intent = state.get("intent")
+        if intent == INTENT_DIRECT:
+            return "generate"
+        if intent == INTENT_KNOWLEDGE:
+            return "build_filters"
+        if intent == INTENT_TICKET_LOOKUP:
+            return "ticket_lookup"
+        if intent == INTENT_CONFIRM:
+            return "ticket_create"
+        if intent in (INTENT_CANCEL, "reconfirm"):
+            if intent == "reconfirm" and state.get("pending_action"):
+                return "confirm_action"
+            return "guardrail"  # cancelled: answer already set
+        if intent == INTENT_TICKET_CREATE:
+            return "clarify" if state.get("missing") else "duplicate_check"
+        return "generate"
+
+    def route_classify_error(state: GraphState) -> str:
+        return "error_handler" if state.get("error") else route_classify(state)
+
+    def route_after_tool(state: GraphState, next_node: str) -> str:
+        return "error_handler" if state.get("error") else next_node
+
+    def route_duplicate(state: GraphState) -> str:
+        if state.get("error"):
+            return "error_handler"
+        return "guardrail" if state.get("duplicate") else "confirm_action"
+
+    builder = StateGraph(GraphState)
+    for name, fn in [
+        ("initialize", initialize),
+        ("classify", classify),
+        ("clarify", clarify),
+        ("build_filters", build_filters),
+        ("retrieve", retrieve),
+        ("ticket_lookup", ticket_lookup),
+        ("duplicate_check", duplicate_check),
+        ("confirm_action", confirm_action),
+        ("ticket_create", ticket_create),
+        ("generate", generate),
+        ("guardrail", guardrail),
+        ("error_handler", error_handler),
+        ("respond", respond),
+    ]:
+        builder.add_node(name, fn)
+
+    builder.add_edge(START, "initialize")
+    builder.add_conditional_edges("initialize", route_initialize)
+    builder.add_conditional_edges("classify", route_classify_error)
+    builder.add_edge("clarify", "guardrail")
+    builder.add_edge("build_filters", "retrieve")
+    builder.add_conditional_edges("retrieve", lambda s: route_after_tool(s, "generate"))
+    builder.add_conditional_edges("ticket_lookup", lambda s: route_after_tool(s, "guardrail"))
+    builder.add_conditional_edges("duplicate_check", route_duplicate)
+    builder.add_edge("confirm_action", "guardrail")
+    builder.add_conditional_edges("ticket_create", lambda s: route_after_tool(s, "guardrail"))
+    builder.add_edge("generate", "guardrail")
+    builder.add_edge("error_handler", "guardrail")
+    builder.add_edge("guardrail", "respond")
+    builder.add_edge("respond", END)
+
+    return builder.compile(checkpointer=checkpointer)
+
+
+class LangGraphRunner:
+    """AgentRunner implementation driving the compiled graph per request.
+    The AsyncSqliteSaver checkpointer is created lazily on first run so the
+    runner can be built in sync dependency-injection code."""
+
+    def __init__(self, ctx_factory, model, checkpoint_db_path: str):
+        self._ctx_factory = ctx_factory  # (usecase) -> ToolContext
+        self._model = model
+        self._db_path = checkpoint_db_path
+        self._saver_ctx = None
+        self._saver = None
+        self._graphs: dict[str, Any] = {}
+
+    async def _graph_for(self, usecase: UseCaseConfig):
+        if self._saver is None:
+            self._saver_ctx = AsyncSqliteSaver.from_conn_string(self._db_path)
+            self._saver = await self._saver_ctx.__aenter__()
+        if usecase.usecase_id not in self._graphs:
+            self._graphs[usecase.usecase_id] = build_graph(
+                self._ctx_factory(usecase), self._model, self._saver
+            )
+        return self._graphs[usecase.usecase_id]
+
+    async def run(self, state, user_message: str):
+        from app.schemas.events import status_event, token_event, usage_event
+
+        started = time.perf_counter()
+        usecase = state.usecase_config
+        graph = await self._graph_for(usecase)
+        config = {"configurable": {"thread_id": state.conversation_id}}
+
+        initial: GraphState = {
+            "user_message": user_message,
+            "user": state.user.model_dump(mode="json"),
+            "usecase": usecase.model_dump(mode="json"),
+            # Reset per-turn keys; pending_action/fields/history/last_topic are
+            # intentionally omitted so the checkpointer carries them forward.
+            "intent": "",
+            "answer": "",
+            "error": None,
+            "evidence": [],
+            "citations": [],
+            "duplicate": False,
+        }
+
+        async for update in graph.astream(initial, config, stream_mode="updates"):
+            for node_name in update:
+                yield status_event("node", node_name)
+
+        final = await graph.aget_state(config)
+        answer = final.values.get("answer", "")
+
+        for chunk in _chunk_text(answer):
+            yield token_event(chunk)
+        for raw in final.values.get("citations", []):
+            yield _citation_event(Citation.model_validate(raw))
+
+        usage = final.values.get("usage", {})
+        usage["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        yield usage_event(usage)
+
+
+def _chunk_text(text: str, size: int = 24):
+    for i in range(0, len(text), size):
+        yield text[i : i + size]
+
+
+def _citation_event(citation: Citation):
+    from app.schemas.events import EventType, StreamEvent
+
+    return StreamEvent(type=EventType.CITATION, data=citation.model_dump(mode="json"))

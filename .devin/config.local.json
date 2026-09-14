@@ -5,7 +5,8 @@
       "Exec(.venv/bin/pytest)",
       "Exec(.venv/bin/uvicorn)",
       "Exec(sleep)",
-      "Exec(.venv/bin/streamlit run)"
+      "Exec(.venv/bin/streamlit run)",
+      "Exec(.venv/bin/ruff format)"
     ]
   }
 }

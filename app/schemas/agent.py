@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.config import UseCaseConfig
 from app.schemas.identity import UserContext
 
 
@@ -46,6 +47,7 @@ class AgentState(BaseModel):
     user: UserContext
     usecase_id: str
     usecase_version: int = 1
+    usecase_config: UseCaseConfig | None = None
     intent: str | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
     tool_results: list[ToolResult] = Field(default_factory=list)

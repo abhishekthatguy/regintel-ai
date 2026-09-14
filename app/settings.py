@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     db_path: Path = PROJECT_ROOT / "data" / "regintel.db"
     usecase_dir: Path = PROJECT_ROOT / "data" / "usecases"
+    knowledge_dir: Path = PROJECT_ROOT / "data" / "knowledge"
     default_usecase: str = "it_support"
     default_employee: str = "e001"
 
