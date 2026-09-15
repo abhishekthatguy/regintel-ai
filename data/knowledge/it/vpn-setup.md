@@ -5,6 +5,7 @@ department: IT
 acl: [IT, HR, ALL]
 version: "1.2"
 source_system: local_files
+source_url: https://kb.internal/it/vpn-setup
 ---
 # Corporate VPN Setup
 

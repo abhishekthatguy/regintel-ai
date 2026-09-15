@@ -55,3 +55,26 @@ def client(tmp_path, monkeypatch):
     deps._runner_for.cache_clear()  # type: ignore[attr-defined]
     deps._store_for.cache_clear()  # type: ignore[attr-defined]
     get_settings.cache_clear()
+
+
+@pytest.fixture
+def settings(client):
+    return get_settings()
+
+
+@pytest.fixture
+def get_store(client):
+    """The same cached store instance the app uses, with corpus ingested
+    (mirrors the auto-ingest that happens on first agent request)."""
+    from app.api import deps
+
+    settings = get_settings()
+    store = deps._store_for(str(settings.db_path))
+    deps.ensure_ingested(store, settings.knowledge_dir)
+    return store
+
+
+@pytest.fixture
+def auth_headers():
+    """e999 carries the 'admin' role in the stub identity provider."""
+    return {"X-Demo-Employee": "e999"}

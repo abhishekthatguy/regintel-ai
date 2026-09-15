@@ -5,6 +5,7 @@ department: IT
 acl: [ALL]
 version: "1.1"
 source_system: local_files
+source_url: https://kb.internal/it/software-requests
 ---
 # Software Installation
 

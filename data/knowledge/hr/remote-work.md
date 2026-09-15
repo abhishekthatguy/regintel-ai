@@ -5,6 +5,7 @@ department: HR
 acl: [ALL]
 version: "1.4"
 source_system: local_files
+source_url: https://kb.internal/hr/remote-work
 ---
 # Remote Work
 

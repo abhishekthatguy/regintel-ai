@@ -5,6 +5,7 @@ department: IT
 acl: [ALL]
 version: "1.0"
 source_system: local_files
+source_url: https://kb.internal/it/laptop-policy
 ---
 # Laptop and Hardware Policy
 

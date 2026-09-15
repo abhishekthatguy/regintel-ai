@@ -5,6 +5,7 @@ department: IT
 acl: [ALL]
 version: "1.3"
 source_system: local_files
+source_url: https://kb.internal/it/phishing-reporting
 ---
 # Reporting Phishing
 

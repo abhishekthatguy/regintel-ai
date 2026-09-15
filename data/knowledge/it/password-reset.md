@@ -5,6 +5,7 @@ department: IT
 acl: [ALL]
 version: "2.0"
 source_system: local_files
+source_url: https://kb.internal/it/password-reset
 ---
 # Password Reset
 

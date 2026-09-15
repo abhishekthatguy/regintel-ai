@@ -65,6 +65,51 @@ CREATE TABLE IF NOT EXISTS feedback (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_message ON feedback(message_id);
+
+CREATE TABLE IF NOT EXISTS documents (
+    doc_id TEXT PRIMARY KEY,
+    checksum TEXT NOT NULL,
+    source_system TEXT,
+    version TEXT,
+    ingested_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(doc_id),
+    title TEXT NOT NULL,
+    section TEXT,
+    text TEXT NOT NULL,
+    department TEXT,
+    acl_json TEXT NOT NULL DEFAULT '[]',
+    version TEXT,
+    source_system TEXT,
+    source_ref TEXT,
+    source_url TEXT,
+    vector_json TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_dept ON chunks(department);
+
+CREATE TABLE IF NOT EXISTS ingestion_jobs (
+    job_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    status TEXT NOT NULL,
+    ingested INTEGER DEFAULT 0,
+    failed INTEGER DEFAULT 0,
+    error TEXT,
+    started_at TEXT,
+    finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ingestion_failures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    error TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -291,6 +336,138 @@ class SQLiteStore:
                 "SELECT * FROM messages WHERE message_id = ?", (message_id,)
             ).fetchone()
         return self._row_to_message(row) if row else None
+
+    # --- chunk store / ingestion (Phase 2) ---
+
+    def document_checksum(self, doc_id: str) -> str | None:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT checksum FROM documents WHERE doc_id = ?", (doc_id,)
+            ).fetchone()
+        return row["checksum"] if row else None
+
+    def replace_document_chunks(self, doc_id: str, chunks, vectors: dict, checksum: str) -> None:
+        """Idempotent re-ingestion: delete stale chunks, insert fresh ones."""
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC).isoformat()
+        with self._session() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO documents (doc_id, checksum, source_system, version, ingested_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    doc_id,
+                    checksum,
+                    chunks[0].source_system if chunks else "",
+                    chunks[0].version if chunks else "",
+                    now,
+                ),
+            )
+            conn.execute("DELETE FROM chunks WHERE document_id = ?", (doc_id,))
+            for c in chunks:
+                conn.execute(
+                    """INSERT INTO chunks
+                       (chunk_id, document_id, title, section, text, department,
+                        acl_json, version, source_system, source_ref, source_url,
+                        vector_json, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        c.chunk_id,
+                        c.document_id,
+                        c.title,
+                        c.section,
+                        c.text,
+                        c.department,
+                        json.dumps(c.acl),
+                        c.version,
+                        c.source_system,
+                        c.source_ref,
+                        c.source_url,
+                        json.dumps(vectors.get(c.chunk_id, [])),
+                        now,
+                    ),
+                )
+
+    def all_chunks(self):
+        from app.retrieval.corpus import Chunk
+
+        with self._session() as conn:
+            rows = conn.execute("SELECT * FROM chunks").fetchall()
+        return [
+            Chunk(
+                chunk_id=r["chunk_id"],
+                document_id=r["document_id"],
+                title=r["title"],
+                section=r["section"] or "",
+                text=r["text"],
+                department=r["department"] or "",
+                acl=json.loads(r["acl_json"]),
+                version=r["version"] or "1",
+                source_system=r["source_system"] or "local_files",
+                source_ref=r["source_ref"] or "",
+                source_url=r["source_url"] or "",
+            )
+            for r in rows
+        ]
+
+    def chunk_vectors(self) -> dict[str, list[float]]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT chunk_id, vector_json FROM chunks WHERE vector_json IS NOT NULL"
+            ).fetchall()
+        return {r["chunk_id"]: json.loads(r["vector_json"]) for r in rows}
+
+    def create_ingestion_job(self, job: dict) -> None:
+        with self._session() as conn:
+            conn.execute(
+                """INSERT INTO ingestion_jobs (job_id, source, status, started_at)
+                   VALUES (?, ?, ?, ?)""",
+                (job["job_id"], job["source"], job["status"], job.get("started_at")),
+            )
+
+    def finish_ingestion_job(
+        self, job_id: str, status: str, ingested: int, failed: int, error: str | None = None
+    ) -> None:
+        from datetime import UTC, datetime
+
+        with self._session() as conn:
+            conn.execute(
+                """UPDATE ingestion_jobs
+                   SET status = ?, ingested = ?, failed = ?, error = ?, finished_at = ?
+                   WHERE job_id = ?""",
+                (status, ingested, failed, error, datetime.now(UTC).isoformat(), job_id),
+            )
+
+    def add_ingestion_failure(self, job_id: str, doc_id: str, error: str) -> None:
+        from datetime import UTC, datetime
+
+        with self._session() as conn:
+            conn.execute(
+                "INSERT INTO ingestion_failures (job_id, doc_id, error, created_at) VALUES (?, ?, ?, ?)",
+                (job_id, doc_id, error, datetime.now(UTC).isoformat()),
+            )
+
+    def get_ingestion_job(self, job_id: str) -> dict | None:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT * FROM ingestion_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_ingestion_jobs(self, limit: int = 20) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT * FROM ingestion_jobs ORDER BY started_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def ingestion_failures(self, job_id: str) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT doc_id, error, created_at FROM ingestion_failures WHERE job_id = ?",
+                (job_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     @staticmethod
     def _row_to_message(row: sqlite3.Row) -> Message:

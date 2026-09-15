@@ -5,6 +5,7 @@ department: HR
 acl: [ALL]
 version: "2.1"
 source_system: local_files
+source_url: https://kb.internal/hr/benefits-overview
 ---
 # Benefits
 

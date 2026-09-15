@@ -86,6 +86,21 @@ def run_case(client, case: dict) -> CaseResult:
         if not any(c.get("document_id") == doc_id for c in last.get("citations", [])):
             fail(f"expected citation to {doc_id}")
 
+    for doc_id in case.get("expect_no_docs", []):
+        if any(c.get("document_id") == doc_id for c in last.get("citations", [])):
+            fail(f"ACL leak: restricted doc {doc_id} cited")
+
+    if case.get("expect_citation_contract"):
+        required = (
+            "citation_id", "document_id", "title", "source_system", "source_ref",
+            "page_section", "chunk_id", "excerpt", "retrieval_score",
+            "rerank_score", "document_version",
+        )
+        for c in last.get("citations", []):
+            missing = [f for f in required if c.get(f) in (None, "")]
+            if missing:
+                fail(f"citation {c.get('citation_id')} missing {missing}")
+
     for text in case.get("expect_contains", []):
         if text not in result.final_answer:
             fail(f"answer missing '{text}'")

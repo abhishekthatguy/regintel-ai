@@ -8,9 +8,11 @@ from app.agent.graph import LangGraphRunner
 from app.agent.runner import AgentRunner
 from app.config.loader import UseCaseLoader
 from app.identity.stub import StubIdentityProvider
+from app.ingestion.local_files import LocalFileAdapter
+from app.ingestion.pipeline import IngestionPipeline
 from app.llm.factory import get_chat_model
-from app.retrieval.bm25 import BM25Index
-from app.retrieval.corpus import load_corpus
+from app.retrieval.embeddings import get_embedder
+from app.retrieval.rerank import get_reranker
 from app.schemas.identity import UserContext
 from app.settings import Settings, get_settings
 from app.stores.sqlite import SQLiteStore
@@ -26,9 +28,11 @@ def _store_for(db_path: str) -> SQLiteStore:
     return store
 
 
-@lru_cache
-def _index_for(knowledge_dir: str) -> BM25Index:
-    return BM25Index(load_corpus(Path(knowledge_dir)))
+def ensure_ingested(store: SQLiteStore, knowledge_dir: Path) -> None:
+    """Auto-ingest the local corpus on first run so the demo works out of
+    the box. Explicit re-ingestion goes through POST /v1/admin/ingestions."""
+    if not store.all_chunks():
+        IngestionPipeline(store, get_embedder()).run(LocalFileAdapter(knowledge_dir))
 
 
 # Registry of live runners so tests/teardown can close checkpointer connections.
@@ -38,10 +42,16 @@ RUNNERS: list[LangGraphRunner] = []
 @lru_cache
 def _runner_for(db_path: str, knowledge_dir: str) -> LangGraphRunner:
     store = _store_for(db_path)
-    index = _index_for(knowledge_dir)
+    ensure_ingested(store, Path(knowledge_dir))
 
     def ctx_factory(usecase) -> ToolContext:
-        return ToolContext(user=None, usecase=usecase, store=store, index=index)  # type: ignore[arg-type]
+        return ToolContext(
+            user=None,
+            usecase=usecase,
+            store=store,
+            embedder=get_embedder(usecase.models.embedding),
+            reranker=get_reranker(usecase.models.rerank),
+        )
 
     runner = LangGraphRunner(ctx_factory, get_chat_model(), db_path)
     RUNNERS.append(runner)

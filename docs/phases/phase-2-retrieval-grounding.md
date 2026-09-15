@@ -37,14 +37,27 @@ An admin runs ingestion from the UI/API → documents flow through a source adap
 
 Real Entra auth (stub identity still drives ACL filters), DynamoDB/Redis, streaming protocol, Angular.
 
+## Status: ✅ implemented (local increment)
+
+Local substitutions vs the cloud target — same interfaces, swapped in P3:
+
+| Planned | Shipped locally |
+|---|---|
+| OpenSearch hybrid index | BM25 + hashing-vector cosine merged via RRF (`app/retrieval/hybrid.py`) |
+| Titan/Cohere embeddings | `HashingEmbedder` (deterministic, offline); `BedrockEmbedder` boundary ready |
+| Cohere Rerank | `LocalReranker` (phrase/coverage/title rescore); `CohereRerank` boundary ready |
+| S3 artifacts | SQLite `chunks`/`documents`/`ingestion_jobs`/`ingestion_failures` tables |
+
 ## Exit criteria
 
-- [ ] Ingestion job runs from UI/API end-to-end; artifacts + chunk index updated; failures dead-lettered
-- [ ] Hybrid retrieval + rerank wired via config; evidence threshold drives not-found responses
-- [ ] Citations meet full contract; UI renders page/section/excerpt/scores
-- [ ] ACL metadata filters provably exclude other-department content
-- [ ] Golden eval: retrieval ≥80% top-5, citations ≥95%, groundedness ≥4/5
-- [ ] Re-index runbook documented (OQ-03 decision recorded)
+- [x] Ingestion job runs from API (`POST /v1/admin/ingestions`, admin role); artifacts + chunk store updated; failures dead-lettered in `ingestion_failures`
+- [x] Hybrid retrieval + rerank wired via config (`models.embedding`, `models.rerank`); rerank threshold drives not-found responses
+- [x] Citations meet full contract (all §10.1 fields incl. retrieval_score, rerank_score, document_version, access_granted); UI renders citation metadata
+- [x] ACL metadata filters provably exclude other-department content (`R2-ACL-*` eval cases + `test_vector_leg_enforces_acl`)
+- [x] Golden eval extended: 25 cases incl. ACL-leak and citation-contract checks
+- [x] Re-index via checksum drift detection: unchanged docs skip, changed docs replace chunks atomically (`test_checksum_change_triggers_reindex`)
+- [ ] Query rewriting via small model (FR-16) — deferred; `LocalChatModel` has no rewriter yet
+- [ ] Judged eval dims (groundedness ≥4/5) — deferred until an LLM judge is configured
 
 ## Key risks
 

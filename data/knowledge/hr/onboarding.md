@@ -5,6 +5,7 @@ department: HR
 acl: [HR, ALL]
 version: "1.1"
 source_system: local_files
+source_url: https://kb.internal/hr/onboarding
 ---
 # Onboarding
 

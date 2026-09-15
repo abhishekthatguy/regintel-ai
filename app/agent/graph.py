@@ -156,12 +156,9 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                     "citations": [],
                 }
             return {
-                "evidence": [
-                    {"chunk": item["chunk"].model_dump(mode="json"), "score": item["score"]}
-                    for item in result["evidence"]
-                ],
+                "evidence": result["evidence"],
                 "citations": [c.model_dump(mode="json") for c in result["citations"]],
-                "last_topic": result["evidence"][0]["chunk"].title,
+                "last_topic": result["evidence"][0]["chunk"]["title"],
             }
         except Exception as exc:
             return {"error": f"knowledge_search:{exc}"}

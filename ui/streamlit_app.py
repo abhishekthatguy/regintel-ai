@@ -96,7 +96,9 @@ def render_message(msg: dict, idx: int) -> None:
                 if c.get("excerpt"):
                     st.write(c["excerpt"])
                 if c.get("retrieval_score") is not None:
-                    st.caption(f"score: {c['retrieval_score']}")
+                    st.caption(
+                        f"retrieval: {c['retrieval_score']} · rerank: {c.get('rerank_score')}"
+                    )
         if msg["role"] == "assistant" and msg.get("message_id"):
             col1, col2, _ = st.columns([0.07, 0.07, 0.86])
             if col1.button("👍", key=f"up{idx}"):
@@ -170,6 +172,10 @@ if prompt := st.chat_input("Ask something…"):
                 )
                 if c.get("excerpt"):
                     st.write(c["excerpt"])
+                if c.get("rerank_score") is not None:
+                    st.caption(
+                        f"retrieval: {c.get('retrieval_score')} · rerank: {c['rerank_score']}"
+                    )
         if usage:
             st.caption(f"model={usage['model']} · tokens={usage['total_tokens']} · {usage['latency_ms']}ms")
 

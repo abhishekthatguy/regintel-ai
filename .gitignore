@@ -10,3 +10,5 @@ data/*.db-journal
 dist/
 build/
 *.egg-info/
+data/*.db-shm
+data/*.db-wal

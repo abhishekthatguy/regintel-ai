@@ -78,12 +78,16 @@ docs/         knowledge base + phase plans
 | `POST /v1/conversations/{id}/messages:stream` | Send message → NDJSON event stream (`status`, `token`, `citation`, `usage`, `complete`, `error`) |
 | `PATCH /v1/conversations/{id}` | Rename (`title`) or archive (`status`) a conversation |
 | `POST /v1/messages/{id}/feedback` | Thumbs rating + reason + comment, linked to message/conversation |
+| `POST /v1/admin/ingestions` | Start an ingestion job (`admin` role; body: `{source: local_files\|opentext\|msgraph}`) |
+| `GET /v1/admin/ingestions` / `/{job_id}` | Ingestion job status + dead-lettered failures |
 
-Demo identity via `X-Demo-Employee: e001|e002|e999` header — **stub only**, replaced by Entra ID JWT validation in Phase 3.
+Demo identity via `X-Demo-Employee: e001|e002|e999` header — **stub only**, replaced by Entra ID JWT validation in Phase 3. `e999` carries the `admin` role.
 
-## Notes / limitations (Phase 1)
+## Notes / limitations (Phase 2)
 
 - LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. A real provider (Bedrock Claude) plugs in via `REGINTEL_LLM_PROVIDER` in Phase 3.
-- Retrieval is local BM25 over `data/knowledge/`; hybrid vector + rerank lands in Phase 2.
+- Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config in Phase 3.
+- Ingestion pipeline (`app/ingestion/`): `SourceAdapter` interface with local-files adapter live and OpenText/Graph skeletons that fail closed; checksum drift detection re-indexes changed docs; per-doc failures land in the `ingestion_failures` dead-letter table.
+- Citations carry the full §10.1 contract: document, section, chunk, excerpt, retrieval + rerank scores, version, source URL/ref, access decision.
 - Auth is a demo header (`X-Demo-Employee`), not real authentication — Entra ID in Phase 3.
 - Multi-turn state persists in the SQLite checkpointer; per-employee ticket scoping is enforced server-side.

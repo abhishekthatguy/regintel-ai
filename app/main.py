@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.routes_admin import router as admin_router
 from app.api.routes_conversations import router as conversations_router
 from app.api.routes_health import router as health_router
 from app.logging_config import configure_logging
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router)
     app.include_router(conversations_router)
+    app.include_router(admin_router)
     return app
 
 
