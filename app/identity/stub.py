@@ -40,8 +40,10 @@ class StubIdentityProvider:
     def __init__(self, default_employee: str = "e001"):
         self._default = default_employee
 
-    async def resolve(self, employee_id: str | None) -> UserContext:
-        key = employee_id or self._default
+    async def resolve(
+        self, demo_employee: str | None = None, bearer_token: str | None = None
+    ) -> UserContext:
+        key = demo_employee or self._default
         user = DEMO_EMPLOYEES.get(key, DEMO_EMPLOYEES[self._default])
         logger.debug("resolved stub identity", extra={"actor": user.employee_id})
         return user

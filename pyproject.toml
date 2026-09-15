@@ -18,6 +18,7 @@ dependencies = [
     "streamlit==1.63.0",
     "langgraph==1.2.11",
     "langgraph-checkpoint-sqlite==3.1.1",
+    "pyjwt[crypto]==2.14.0",
 ]
 
 [project.optional-dependencies]

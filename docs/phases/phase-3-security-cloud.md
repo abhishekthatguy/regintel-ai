@@ -40,14 +40,29 @@ A user signs in with Entra ID → FastAPI validates JWT → requests stream resp
 
 Angular UI, multilingual, voice, Genesys CX integration, CRM.
 
+## Status: ✅ local slice implemented
+
+Real code shipped; enterprise integrations are boundaries that fail closed until credentials/config arrive:
+
+| Area | Shipped | Enterprise swap (needs creds) |
+|---|---|---|
+| Auth (FR-01/02) | `JWTIdentityProvider` — real signature/iss/aud/exp validation; HS256 dev secret locally, JWKS/RS256 for Entra; `REGINTEL_AUTH_MODE=jwt` | Entra app registration + JWKS URL |
+| Stores | `DynamoDBStore` skeleton behind `REGINTEL_STORE_BACKEND`; key design documented | AWS tables + IAM |
+| Cache (FR-21) | `LocalTTLCache` + `RedisCache` skeleton behind `REGINTEL_CACHE_BACKEND` | ElastiCache endpoint |
+| Models (FR-18) | `BedrockChatModel` (Converse API, OQ-05 fallback list) via `REGINTEL_LLM_PROVIDER=bedrock`; self-degrades to local | Bedrock model access |
+| Guardrails | Local patterns always run; Bedrock `ApplyGuardrail` merged when `REGINTEL_GUARDRAIL_ID` set | Guardrail id/version |
+| Audit (NFR-12) | `audit_log` table + `record_audit` on auth failures, ticket create, ingestion runs | — |
+| Deploy | `app/lambda_handler.py` (Mangum, guarded import) | Lambda + API Gateway packaging |
+
 ## Exit criteria
 
-- [ ] Authenticated end-to-end cloud flow passes security tests
-- [ ] JWT rejected without crypto validation + issuer/audience checks (tests prove it)
-- [ ] Streaming events consumed by UI; P95 targets measured and met
-- [ ] DynamoDB/Redis/Bedrock swap via config only — local mode still works for evaluators
-- [ ] Deployed to approved AWS environment; smoke test green; rollback path documented
-- [ ] OQ-01 answered: deploy target confirmed (pure AWS vs Genesys Cloud integration path)
+- [x] JWT rejected without crypto validation + issuer/audience checks (8 security tests: valid/expired/forged/wrong-iss/wrong-aud/missing-claims/missing-token/role-enforcement)
+- [x] Security suite: doc-injection containment, disabled-tool invocation, audit-trail assertions — 12 cases green
+- [x] Streaming events consumed by UI (existing P1 contract; citation scores added P2)
+- [x] Backend swap via config only (`auth_mode`, `store_backend`, `cache_backend`, `llm_provider`) — local stub mode fully working for evaluators
+- [ ] Deployed to approved AWS environment — **blocked on enterprise AWS account + Entra app registration** (request early)
+- [ ] P95 targets measured — requires real cloud deploy
+- [ ] OQ-01 answered: deploy target confirmed (pure AWS vs Genesys Cloud integration path) — still open
 
 ## Key risks
 

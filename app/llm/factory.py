@@ -8,10 +8,12 @@ from app.llm.local import LocalChatModel
 @lru_cache
 def get_chat_model() -> ChatModel:
     """Provider selected by REGINTEL_LLM_PROVIDER (default: local deterministic).
-    Bedrock/OpenAI implementations plug in here in Phase 3."""
+    "bedrock" selects BedrockChatModel (Sonnet 4.5 default, OQ-05 fallbacks);
+    it self-degrades to LocalChatModel when boto3/credentials are absent."""
     provider = os.getenv("REGINTEL_LLM_PROVIDER", "local")
-    if provider != "local":
-        # Phase 3: instantiate the configured provider. Until then fall back
-        # to local so the demo never breaks on missing credentials.
-        pass
+    if provider == "bedrock":
+        from app.llm.bedrock import BedrockChatModel
+
+        model_id = os.getenv("REGINTEL_LLM_MODEL_ID", "")
+        return BedrockChatModel(model_id=model_id) if model_id else BedrockChatModel()
     return LocalChatModel()

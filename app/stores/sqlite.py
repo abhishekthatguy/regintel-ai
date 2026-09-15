@@ -110,6 +110,16 @@ CREATE TABLE IF NOT EXISTS ingestion_failures (
     error TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor);
 """
 
 
@@ -468,6 +478,27 @@ class SQLiteStore:
                 (job_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # --- audit (Phase 3, NFR-12) ---
+
+    def add_audit_record(self, actor: str, action: str, outcome: str, detail: dict) -> None:
+        from datetime import UTC, datetime
+
+        with self._session() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (actor, action, outcome, detail_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (actor, action, outcome, json.dumps(detail), datetime.now(UTC).isoformat()),
+            )
+
+    def list_audit_records(self, limit: int = 100) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT actor, action, outcome, detail_json, created_at "
+                "FROM audit_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [{**r, "detail": json.loads(r.pop("detail_json"))} for r in map(dict, rows)]
 
     @staticmethod
     def _row_to_message(row: sqlite3.Row) -> Message:

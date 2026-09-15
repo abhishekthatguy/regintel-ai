@@ -22,6 +22,22 @@ class Settings(BaseSettings):
     default_usecase: str = "it_support"
     default_employee: str = "e001"
 
+    # --- Phase 3: auth / cloud backend switches ---
+    # "stub" keeps the X-Demo-Employee header path; "jwt" requires a Bearer
+    # token validated for signature/issuer/audience/expiry on every request.
+    auth_mode: str = "stub"
+    jwt_issuer: str = "regintel-dev"
+    jwt_audience: str = "regintel-api"
+    jwt_secret: str = ""  # HS256 dev key — never a real secret in repo/.env.example
+    jwt_jwks_url: str = ""  # Entra JWKS endpoint when set (RS256)
+
+    # Backend selection — enterprise implementations swap in via config.
+    store_backend: str = "sqlite"  # "dynamodb" -> DynamoDBStore (needs AWS cfg)
+    cache_backend: str = "local"  # "redis" -> RedisCache (needs redis_url)
+    redis_url: str = ""
+    cache_ttl_seconds: int = 300
+    guardrail_id: str = ""  # Bedrock guardrail id/version, e.g. "abc123:1"
+
 
 @lru_cache
 def get_settings() -> Settings:

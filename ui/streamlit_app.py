@@ -19,7 +19,13 @@ st.title("RegIntel AI")
 
 
 def headers(employee_id: str) -> dict:
-    return {"X-Demo-Employee": employee_id}
+    """Auth headers: demo header in stub mode; paste a Bearer token when the
+    API runs with REGINTEL_AUTH_MODE=jwt (see scripts/mint_dev_token.py)."""
+    h = {"X-Demo-Employee": employee_id}
+    token = st.session_state.get("bearer_token", "").strip()
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
 
 
 def send_feedback(message_id: str, rating: str, employee_id: str) -> None:
@@ -42,6 +48,12 @@ with st.sidebar:
         st.session_state.pop("messages", None)
         st.rerun()
     st.caption(f"API: {API_BASE}")
+    st.text_input(
+        "Bearer token (JWT mode only)",
+        key="bearer_token",
+        type="password",
+        help="Only needed when the API runs with REGINTEL_AUTH_MODE=jwt",
+    )
 
     st.subheader("Conversations")
     try:

@@ -81,13 +81,15 @@ docs/         knowledge base + phase plans
 | `POST /v1/admin/ingestions` | Start an ingestion job (`admin` role; body: `{source: local_files\|opentext\|msgraph}`) |
 | `GET /v1/admin/ingestions` / `/{job_id}` | Ingestion job status + dead-lettered failures |
 
-Demo identity via `X-Demo-Employee: e001|e002|e999` header — **stub only**, replaced by Entra ID JWT validation in Phase 3. `e999` carries the `admin` role.
+Demo identity via `X-Demo-Employee: e001|e002|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`.
 
-## Notes / limitations (Phase 2)
+## Notes / limitations (Phase 3)
 
-- LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. A real provider (Bedrock Claude) plugs in via `REGINTEL_LLM_PROVIDER` in Phase 3.
-- Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config in Phase 3.
+- LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Bedrock Claude plugs in via `REGINTEL_LLM_PROVIDER=bedrock` (Converse API; self-degrades to local without credentials).
+- Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config.
 - Ingestion pipeline (`app/ingestion/`): `SourceAdapter` interface with local-files adapter live and OpenText/Graph skeletons that fail closed; checksum drift detection re-indexes changed docs; per-doc failures land in the `ingestion_failures` dead-letter table.
 - Citations carry the full §10.1 contract: document, section, chunk, excerpt, retrieval + rerank scores, version, source URL/ref, access decision.
-- Auth is a demo header (`X-Demo-Employee`), not real authentication — Entra ID in Phase 3.
+- Auth is a demo header (`X-Demo-Employee`) in stub mode; JWT mode does real crypto validation locally (HS256 dev key) or Entra RS256 via JWKS.
+- Cloud backends are boundaries: `REGINTEL_STORE_BACKEND=dynamodb`, `REGINTEL_CACHE_BACKEND=redis`, `REGINTEL_LLM_PROVIDER=bedrock`, `REGINTEL_GUARDRAIL_ID` all fail closed or degrade to local until credentials exist. `app/lambda_handler.py` provides the Lambda entry point.
+- Security-relevant actions write to the `audit_log` table (actor, action, outcome, config context).
 - Multi-turn state persists in the SQLite checkpointer; per-employee ticket scoping is enforced server-side.

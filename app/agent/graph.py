@@ -247,6 +247,20 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             idem = f"{rctx.user.employee_id}:{fields['category']}:{fields['description'][:40]}"
             result = create_tool.run(rctx, fields, idempotency_key=idem)
             ticket = result["ticket"]
+            from app.audit import record_audit
+
+            record_audit(
+                rctx.store,
+                actor=rctx.user.employee_id,
+                action="ticket_create",
+                outcome=ticket["ticket_id"],
+                detail={
+                    "category": ticket["category"],
+                    "priority": ticket["priority"],
+                    "usecase": ctx.usecase.usecase_id,
+                    "model": ctx.usecase.models.generation,
+                },
+            )
             return {
                 "answer": model.respond(
                     "created",

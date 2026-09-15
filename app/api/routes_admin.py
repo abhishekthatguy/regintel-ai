@@ -50,6 +50,15 @@ def start_ingestion(
         result = pipeline.run(adapter)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Source adapter failed: {exc}") from exc
+    from app.audit import record_audit
+
+    record_audit(
+        store,
+        actor=_admin.employee_id,
+        action="ingestion_run",
+        outcome=result["job_id"],
+        detail={"source": req.source, "ingested": result["ingested"], "failed": result["failed"]},
+    )
     return result
 
 

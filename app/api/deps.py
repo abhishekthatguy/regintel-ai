@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -22,8 +23,17 @@ DEMO_EMPLOYEE_HEADER = "X-Demo-Employee"
 
 
 @lru_cache
-def _store_for(db_path: str) -> SQLiteStore:
-    store = SQLiteStore(db_path)
+def _store_for(db_path: str, backend: str = "sqlite"):
+    """Store selected by REGINTEL_STORE_BACKEND. 'dynamodb' instantiates the
+    enterprise boundary — it fails closed until AWS config is provided."""
+    if backend == "dynamodb":
+        from app.stores.dynamodb import DynamoDBStore
+
+        store = DynamoDBStore(
+            table_prefix="regintel", region=os.getenv("AWS_REGION", "")
+        )
+    else:
+        store = SQLiteStore(db_path)
     store.init_schema()
     return store
 
@@ -59,7 +69,7 @@ def _runner_for(db_path: str, knowledge_dir: str) -> LangGraphRunner:
 
 
 def get_store(settings: Annotated[Settings, Depends(get_settings)]) -> SQLiteStore:
-    return _store_for(str(settings.db_path))
+    return _store_for(str(settings.db_path), settings.store_backend)
 
 
 def get_usecase_loader(settings: Annotated[Settings, Depends(get_settings)]) -> UseCaseLoader:
@@ -73,10 +83,43 @@ def get_agent_runner(settings: Annotated[Settings, Depends(get_settings)]) -> Ag
 async def get_identity(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
+    store: Annotated[SQLiteStore, Depends(get_store)],
     x_demo_employee: Annotated[str | None, Header(alias=DEMO_EMPLOYEE_HEADER)] = None,
+    authorization: Annotated[str | None, Header()] = None,
 ) -> UserContext:
+    """Auth-mode switch (FR-01): 'stub' resolves the demo header; 'jwt'
+    cryptographically validates a Bearer token on every request."""
+    if settings.auth_mode == "jwt":
+        from fastapi import HTTPException
+
+        from app.identity.jwt import AuthError, JWTIdentityProvider
+
+        provider = JWTIdentityProvider(
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            secret=settings.jwt_secret,
+            jwks_url=settings.jwt_jwks_url,
+        )
+        token = (
+            authorization.removeprefix("Bearer ").strip()
+            if authorization and authorization.startswith("Bearer ")
+            else None
+        )
+        try:
+            return await provider.resolve(bearer_token=token)
+        except AuthError as exc:
+            from app.audit import record_audit
+
+            record_audit(
+                store, actor="anonymous", action="auth_failure",
+                outcome=exc.reason, detail={"path": request.url.path},
+            )
+            raise HTTPException(
+                status_code=401, detail=f"Unauthorized: {exc.reason}"
+            ) from exc
+
     provider = StubIdentityProvider(default_employee=settings.default_employee)
-    return await provider.resolve(x_demo_employee)
+    return await provider.resolve(demo_employee=x_demo_employee)
 
 
 StoreDep = Annotated[SQLiteStore, Depends(get_store)]
