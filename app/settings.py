@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     guardrail_id: str = ""  # Bedrock guardrail id/version, e.g. "abc123:1"
 
+    # Browser clients allowed to call the API (Angular dev server, etc.).
+    allowed_origins: list[str] = [
+        "http://localhost:4200",
+        "http://localhost:8501",
+        "http://127.0.0.1:4200",
+    ]
+
 
 @lru_cache
 def get_settings() -> Settings:

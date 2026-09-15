@@ -500,6 +500,78 @@ class SQLiteStore:
             ).fetchall()
         return [{**r, "detail": json.loads(r.pop("detail_json"))} for r in map(dict, rows)]
 
+    # --- analytics (Phase 4, FR-25) ---
+
+    def analytics_summary(self) -> dict:
+        with self._session() as conn:
+            convs = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()["n"]
+            msgs = conn.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(usage_json,'$.total_tokens')),0) AS tok,"
+                " COALESCE(AVG(json_extract(usage_json,'$.latency_ms')),0) AS lat"
+                " FROM messages WHERE role = 'assistant'"
+            ).fetchone()
+            tickets = conn.execute("SELECT COUNT(*) AS n FROM tickets").fetchone()["n"]
+            fb = conn.execute(
+                "SELECT COALESCE(SUM(rating='up'),0) AS up, COALESCE(SUM(rating='down'),0) AS dn"
+                " FROM feedback"
+            ).fetchone()
+        return {
+            "conversations": convs,
+            "assistant_messages": msgs["n"],
+            "total_tokens": msgs["tok"],
+            "avg_latency_ms": round(msgs["lat"], 1),
+            "tickets": tickets,
+            "feedback_up": fb["up"],
+            "feedback_down": fb["dn"],
+        }
+
+    def analytics_by_usecase(self) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT c.usecase_id, COUNT(DISTINCT c.conversation_id) AS conversations,"
+                " COUNT(m.message_id) AS messages"
+                " FROM conversations c LEFT JOIN messages m"
+                "   ON m.conversation_id = c.conversation_id AND m.role = 'assistant'"
+                " GROUP BY c.usecase_id"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def analytics_daily(self, days: int = 14) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS messages"
+                " FROM messages WHERE role = 'assistant'"
+                " GROUP BY day ORDER BY day DESC LIMIT ?",
+                (days,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def analytics_not_found(self, limit: int = 50) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT actor, detail_json, created_at FROM audit_log"
+                " WHERE action = 'knowledge_not_found' ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "actor": r["actor"],
+                "query": json.loads(r["detail_json"]).get("query", ""),
+                "usecase": json.loads(r["detail_json"]).get("usecase", ""),
+                "at": r["created_at"],
+            }
+            for r in rows
+        ]
+
+    def analytics_feedback_recent(self, limit: int = 20) -> list[dict]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT rating, reason, comment, created_at FROM feedback"
+                " ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     @staticmethod
     def _row_to_message(row: sqlite3.Row) -> Message:
         from app.schemas.agent import UsageSummary

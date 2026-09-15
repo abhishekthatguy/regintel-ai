@@ -29,6 +29,14 @@ cp .env.example .env                  # then edit if needed (defaults work)
 
 Open http://localhost:8501. Pick a demo employee (header `X-Demo-Employee` carries the identity) and a use case, then chat.
 
+**Angular app** (Phase 4 end-user surface):
+
+```bash
+cd ui/web && npm install && npx ng serve
+```
+
+Open http://localhost:4200 — chat with streaming + citations + feedback + language selector, `/analytics` for the admin dashboard (sign in as e999).
+
 ## Test
 
 ```bash
@@ -40,23 +48,27 @@ Open http://localhost:8501. Pick a demo employee (header `X-Demo-Employee` carri
 
 ```
 app/
-  api/        FastAPI routes (health, conversations, streaming, feedback)
-  agent/      AgentRunner protocol, stub, LangGraphRunner + graph (all §9 nodes)
-  config/     UseCaseLoader — versioned YAML use-case config (DynamoDB in P3)
-  guardrails/ input/output checks (injection, sensitive data)
-  identity/   IdentityProvider protocol + stub (Entra ID/JWT in P3)
-  llm/        ChatModel protocol + deterministic local model (Bedrock in P3)
-  retrieval/  corpus loader + BM25 index (OpenSearch hybrid in P2)
+  api/        FastAPI routes (health, conversations, streaming, feedback, admin)
+  agent/      AgentRunner protocol, LangGraphRunner + graph (all §9 nodes)
+  config/     UseCaseLoader — versioned YAML use-case config (DynamoDB boundary)
+  guardrails/ input/output checks + Bedrock ApplyGuardrail boundary
+  identity/   IdentityProvider protocol + stub + JWT (HS256 dev / Entra JWKS)
+  ingestion/  SourceAdapter (local files live, OpenText/Graph skeletons) + pipeline
+  llm/        ChatModel protocol + local model + BedrockChatModel
+  retrieval/  BM25 + hashing-vector hybrid (RRF) + reranker (OpenSearch/Bedrock swap)
   schemas/    Pydantic contracts: Message, Conversation, Citation, AgentState,
               ToolResult, UseCaseConfig, StreamEvent
-  stores/     SQLiteStore: conversations, messages, tickets, feedback (DynamoDB in P3)
+  stores/     SQLiteStore + DynamoDBStore skeleton; audit_log, chunks, jobs
   tools/      knowledge_search, ticket_lookup, ticket_create behind ToolContext
+  audit.py    NFR-12 audit records; cache.py FR-21 cache boundary
+  lambda_handler.py  Mangum entry point for Lambda + API Gateway
   middleware.py   correlation-ID middleware
   logging_config.py  JSON logs + sensitive-field redaction
 ui/
   streamlit_app.py  chat UI: streamed answers, citations, tool trace, feedback
   pages/2_Admin.py  use-case config + data inspection (FR-27)
   pages/3_Eval.py   golden-suite runner + report (FR-26)
+  web/            Angular 21 end-user app (chat, citations, feedback, analytics)
 data/
   knowledge/  sample corpus (IT + HR markdown with metadata front-matter)
   usecases/   versioned use-case configs (it_support, hr_support)
@@ -80,10 +92,11 @@ docs/         knowledge base + phase plans
 | `POST /v1/messages/{id}/feedback` | Thumbs rating + reason + comment, linked to message/conversation |
 | `POST /v1/admin/ingestions` | Start an ingestion job (`admin` role; body: `{source: local_files\|opentext\|msgraph}`) |
 | `GET /v1/admin/ingestions` / `/{job_id}` | Ingestion job status + dead-lettered failures |
+| `GET /v1/admin/analytics` | Usage/feedback/latency/not-found aggregates (`admin` role) |
 
 Demo identity via `X-Demo-Employee: e001|e002|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`.
 
-## Notes / limitations (Phase 3)
+## Notes / limitations (Phase 4)
 
 - LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Bedrock Claude plugs in via `REGINTEL_LLM_PROVIDER=bedrock` (Converse API; self-degrades to local without credentials).
 - Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config.
@@ -92,4 +105,5 @@ Demo identity via `X-Demo-Employee: e001|e002|e999` header in stub mode (`e999` 
 - Auth is a demo header (`X-Demo-Employee`) in stub mode; JWT mode does real crypto validation locally (HS256 dev key) or Entra RS256 via JWKS.
 - Cloud backends are boundaries: `REGINTEL_STORE_BACKEND=dynamodb`, `REGINTEL_CACHE_BACKEND=redis`, `REGINTEL_LLM_PROVIDER=bedrock`, `REGINTEL_GUARDRAIL_ID` all fail closed or degrade to local until credentials exist. `app/lambda_handler.py` provides the Lambda entry point.
 - Security-relevant actions write to the `audit_log` table (actor, action, outcome, config context).
+- Angular app (`ui/web/`) is the end-user surface; Entra MSAL login swaps in once the app registration exists (bearer-token input today). Multilingual selection is recorded and routed to the model boundary — the local model discloses English-only.
 - Multi-turn state persists in the SQLite checkpointer; per-employee ticket scoping is enforced server-side.

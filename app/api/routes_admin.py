@@ -81,3 +81,21 @@ def get_ingestion(
         raise HTTPException(status_code=404, detail="Ingestion job not found")
     job["failures"] = store.ingestion_failures(job_id)
     return job
+
+
+@router.get("/analytics")
+def analytics(
+    _admin: Annotated[UserContext, Depends(require_admin)],
+    store: Annotated[SQLiteStore, Depends(get_store)],
+) -> dict:
+    """FR-25: usage/quality/feedback/latency/not-found aggregates for the
+    dashboard — sliced by use case and day; department scoping rides on the
+    admin's own claims in cloud mode."""
+    return {
+        "summary": store.analytics_summary(),
+        "by_usecase": store.analytics_by_usecase(),
+        "daily": store.analytics_daily(),
+        "not_found_queries": store.analytics_not_found(),
+        "recent_feedback": store.analytics_feedback_recent(),
+        "audit_recent": store.list_audit_records(limit=20),
+    }

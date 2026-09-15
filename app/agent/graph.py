@@ -51,6 +51,7 @@ class GraphState(TypedDict, total=False):
     pending_action: dict[str, Any] | None
     evidence: list[dict[str, Any]]
     citations: list[dict[str, Any]]
+    language: str
     answer: str
     usage: dict[str, Any]
     error: str | None
@@ -150,6 +151,16 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                 query = f"{state['last_topic']} {query}"
             result = knowledge_tool.run(req_ctx(state), query)
             if not result["found"]:
+                from app.audit import record_audit
+
+                rctx = req_ctx(state)
+                record_audit(
+                    rctx.store,
+                    actor=rctx.user.employee_id,
+                    action="knowledge_not_found",
+                    outcome="no_evidence",
+                    detail={"query": query[:200], "usecase": ctx.usecase.usecase_id},
+                )
                 return {
                     "answer": model.respond("not_found"),
                     "evidence": [],
@@ -280,7 +291,11 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             return {"answer": model.respond("greeting", name=state["user"]["name"].split()[0])}
         if state.get("answer"):
             return {}  # not_found etc. already composed upstream
-        return {"answer": model.generate_grounded(state.get("evidence", []))}
+        return {
+            "answer": model.generate_grounded(
+                state.get("evidence", []), language=state.get("language", "en")
+            )
+        }
 
     @node("guardrail")
     def guardrail(state: GraphState) -> dict:
@@ -309,6 +324,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             "total_tokens": 0,
             "estimated_cost_usd": 0.0,
             "latency_ms": 0.0,
+            "language": state.get("language", "en"),
         }
         usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
         return {"history": history[-40:], "usage": usage}
@@ -406,7 +422,7 @@ class LangGraphRunner:
             )
         return self._graphs[usecase.usecase_id]
 
-    async def run(self, state, user_message: str):
+    async def run(self, state, user_message: str, language: str = "en"):
         from app.schemas.events import status_event, token_event, usage_event
 
         started = time.perf_counter()
@@ -426,6 +442,7 @@ class LangGraphRunner:
             "evidence": [],
             "citations": [],
             "duplicate": False,
+            "language": language,
         }
 
         async for update in graph.astream(initial, config, stream_mode="updates"):

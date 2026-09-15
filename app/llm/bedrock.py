@@ -50,11 +50,16 @@ class BedrockChatModel:
     def respond(self, template: str, **kwargs) -> str:
         return self._fallback.respond(template, **kwargs)
 
-    def generate_grounded(self, evidence: list[dict[str, Any]]) -> str:
+    def generate_grounded(
+        self, evidence: list[dict[str, Any]], language: str = "en"
+    ) -> str:
         if not self._client:
-            return self._fallback.generate_grounded(evidence)
-        import json
+            return self._fallback.generate_grounded(evidence, language=language)
+        import json  # noqa: F401
 
+        lang_directive = (
+            f"Respond in {language}. " if language != "en" else ""
+        )
         context = "\n\n".join(
             f"[{i}] {item['chunk']['title']} — {item['chunk']['section']}\n"
             f"{item['chunk']['text']}"
@@ -67,8 +72,8 @@ class BedrockChatModel:
                     "role": "user",
                     "content": [
                         {
-                            "text": "Answer using ONLY this evidence; tag each "
-                            f"claim with its [cN] marker.\n\n{context}"
+                            "text": f"{lang_directive}Answer using ONLY this "
+                            f"evidence; tag each claim with its [cN] marker.\n\n{context}"
                         }
                     ],
                 }

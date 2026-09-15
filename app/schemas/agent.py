@@ -28,6 +28,7 @@ class UsageSummary(BaseModel):
     total_tokens: int = 0
     estimated_cost_usd: float = 0.0
     latency_ms: float = 0.0
+    language: str = "en"
 
 
 class PendingAction(BaseModel):

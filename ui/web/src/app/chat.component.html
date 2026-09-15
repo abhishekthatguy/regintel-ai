@@ -1,0 +1,114 @@
+<div class="flex h-[calc(100vh-4rem)] gap-4 p-4">
+  <!-- Sidebar: identity, use case, conversations -->
+  <aside class="w-64 shrink-0 space-y-4 overflow-y-auto rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+    <div>
+      <label class="mb-1 block text-xs font-medium text-slate-400" for="employee">Employee (stub mode)</label>
+      <select id="employee" class="w-full rounded bg-slate-900 p-2 text-sm"
+          [ngModel]="api.employee()" (ngModelChange)="api.employee.set($event); refreshConversations()">
+        <option value="e001">e001 — Asha (IT)</option>
+        <option value="e002">e002 — Rahul (HR)</option>
+        <option value="e999">e999 — Admin (IT)</option>
+      </select>
+    </div>
+    <div>
+      <label class="mb-1 block text-xs font-medium text-slate-400" for="token">Bearer token (JWT mode)</label>
+      <input id="token" type="password" placeholder="optional"
+          class="w-full rounded bg-slate-900 p-2 text-sm"
+          [ngModel]="api.bearerToken()" (ngModelChange)="api.bearerToken.set($event)" />
+    </div>
+    <div>
+      <label class="mb-1 block text-xs font-medium text-slate-400" for="usecase">Use case</label>
+      <select id="usecase" class="w-full rounded bg-slate-900 p-2 text-sm" [(ngModel)]="usecaseId">
+        <option value="it_support">IT Support</option>
+        <option value="hr_support">HR Policy</option>
+      </select>
+    </div>
+    <div>
+      <label class="mb-1 block text-xs font-medium text-slate-400" for="lang">Response language</label>
+      <select id="lang" class="w-full rounded bg-slate-900 p-2 text-sm" [(ngModel)]="language">
+        <option *ngFor="let l of languages" [value]="l">{{ l }}</option>
+      </select>
+    </div>
+    <button class="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium hover:bg-indigo-500"
+        (click)="newConversation()">New conversation</button>
+
+    <nav aria-label="Conversations">
+      <p class="mb-1 text-xs font-medium text-slate-400">Conversations</p>
+      <ul class="space-y-1">
+        <li *ngFor="let c of conversations()">
+          <button class="w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-slate-700"
+              [class.bg-slate-700]="c['conversation_id'] === conversationId()"
+              (click)="resume(c['conversation_id'])">
+            {{ c['title'] }}
+          </button>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- Chat pane -->
+  <main class="flex flex-1 flex-col rounded-xl border border-slate-700 bg-slate-800/40">
+    <header class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
+      <span class="text-sm text-slate-400">
+        {{ conversationId() ? 'Conversation ' + conversationId()?.slice(0, 8) : 'New conversation' }}
+      </span>
+      <button *ngIf="conversationId()" class="text-xs text-indigo-400 hover:underline" (click)="rename()">
+        rename
+      </button>
+    </header>
+
+    <div class="flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
+      <div *ngFor="let m of messages()" class="max-w-3xl">
+        <div class="rounded-xl px-4 py-3 text-sm"
+            [ngClass]="m.role === 'user' ? 'ml-auto bg-indigo-600/80' : 'bg-slate-700/80'">
+          <p class="whitespace-pre-wrap">{{ m.content }}</p>
+        </div>
+
+        <!-- Citations -->
+        <div *ngIf="m.citations.length" class="mt-1 space-y-1">
+          <details *ngFor="let c of m.citations"
+              class="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs">
+            <summary class="cursor-pointer font-medium text-indigo-300">
+              [{{ c.citation_id }}] {{ c.title }} — {{ c.page_section }}
+            </summary>
+            <p class="mt-2 text-slate-300">{{ c.excerpt }}</p>
+            <p class="mt-1 text-slate-500">
+              {{ c.document_id }} · v{{ c.document_version }} · {{ c.source_ref }}
+              · retrieval {{ c.retrieval_score }} · rerank {{ c.rerank_score }}
+            </p>
+          </details>
+        </div>
+
+        <!-- Feedback -->
+        <div *ngIf="m.role === 'assistant' && m.messageId" class="mt-1 flex gap-2 text-xs">
+          <button class="rounded px-2 py-0.5" [class.text-emerald-400]="m.feedback === 'up'"
+              (click)="feedback(m, 'up')" aria-label="Helpful">👍</button>
+          <button class="rounded px-2 py-0.5" [class.text-rose-400]="m.feedback === 'down'"
+              (click)="feedback(m, 'down')" aria-label="Not helpful">👎</button>
+          <span *ngIf="m.usage" class="text-slate-500">
+            {{ m.usage['total_tokens'] }} tok · {{ m.usage['latency_ms'] }}ms · {{ m.usage['language'] }}
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="busy()" class="text-xs text-slate-400">
+        <span class="animate-pulse">thinking…</span>
+        <span class="ml-2 text-slate-600">{{ nodeTrace().join(' → ') }}</span>
+      </div>
+      <div *ngIf="error()" class="rounded-lg bg-rose-900/40 px-3 py-2 text-sm text-rose-300" role="alert">
+        {{ error() }}
+      </div>
+    </div>
+
+    <form class="flex gap-2 border-t border-slate-700 p-3" (ngSubmit)="send()">
+      <input [(ngModel)]="draft" name="draft" required
+          placeholder="Ask about knowledge, tickets, or create a ticket…"
+          aria-label="Message"
+          class="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <button type="submit" [disabled]="busy() || !draft.trim()"
+          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40">
+        Send
+      </button>
+    </form>
+  </main>
+</div>

@@ -79,6 +79,7 @@ class CreateConversationResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+    language: str = "en"  # FR-22: response language; citations stay original-language
 
 
 # Late import avoidance: UsageSummary lives in agent.py

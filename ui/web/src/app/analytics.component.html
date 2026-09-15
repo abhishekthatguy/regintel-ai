@@ -1,0 +1,66 @@
+<div class="mx-auto max-w-5xl p-6">
+  <h1 class="mb-6 text-xl font-semibold">Analytics</h1>
+
+  <div *ngIf="error()" class="rounded-lg bg-rose-900/40 px-4 py-3 text-rose-300" role="alert">
+    {{ error() }} — sign in as e999 (admin) or provide an admin bearer token.
+  </div>
+
+  <ng-container *ngIf="data()">
+    <section class="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4" *ngFor="let k of ['conversations','assistant_messages','total_tokens','avg_latency_ms']">
+        <p class="text-xs text-slate-400">{{ k.replace('_',' ') }}</p>
+        <p class="mt-1 text-2xl font-semibold">{{ summary[k] }}</p>
+      </div>
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <p class="text-xs text-slate-400">feedback</p>
+        <p class="mt-1 text-2xl font-semibold">
+          <span class="text-emerald-400">{{ summary['feedback_up'] }}↑</span>
+          <span class="ml-2 text-rose-400">{{ summary['feedback_down'] }}↓</span>
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <p class="text-xs text-slate-400">tickets</p>
+        <p class="mt-1 text-2xl font-semibold">{{ summary['tickets'] }}</p>
+      </div>
+    </section>
+
+    <section class="mt-6 grid gap-4 md:grid-cols-2">
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Usage by use case</h2>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-xs text-slate-500">
+            <th class="pb-2">use case</th><th class="pb-2">conversations</th><th class="pb-2">messages</th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let u of byUsecase" class="border-t border-slate-700/60">
+              <td class="py-1.5">{{ u['usecase_id'] }}</td>
+              <td>{{ u['conversations'] }}</td>
+              <td>{{ u['messages'] }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Not-found queries <span class="text-xs text-slate-500">(content gaps)</span></h2>
+        <ul class="space-y-1.5 text-sm">
+          <li *ngFor="let q of notFound" class="truncate text-slate-300">
+            <span class="text-slate-500">{{ q['actor'] }}:</span> {{ q['query'] }}
+          </li>
+          <li *ngIf="!notFound.length" class="text-slate-500">none recorded</li>
+        </ul>
+      </div>
+
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Recent feedback</h2>
+        <ul class="space-y-1.5 text-sm">
+          <li *ngFor="let f of recentFeedback">
+            <span [class]="f['rating'] === 'up' ? 'text-emerald-400' : 'text-rose-400'">{{ f['rating'] }}</span>
+            <span class="ml-2 text-slate-300">{{ f['comment'] || f['reason'] || '—' }}</span>
+          </li>
+          <li *ngIf="!recentFeedback.length" class="text-slate-500">none yet</li>
+        </ul>
+      </div>
+    </section>
+  </ng-container>
+</div>

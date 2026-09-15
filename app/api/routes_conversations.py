@@ -127,7 +127,7 @@ async def stream_message(
         citations: list[dict] = []
         usage = UsageSummary()
         try:
-            async for event in runner.run(state, body.content):
+            async for event in runner.run(state, body.content, language=body.language):
                 if event.type == EventType.TOKEN:
                     tokens.append(event.data["text"])
                 elif event.type == EventType.USAGE:

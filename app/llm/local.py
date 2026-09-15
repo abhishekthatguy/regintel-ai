@@ -116,14 +116,23 @@ class LocalChatModel:
 
     # --- generation -----------------------------------------------------
 
-    def generate_grounded(self, evidence: list[dict[str, Any]]) -> str:
+    def generate_grounded(
+        self, evidence: list[dict[str, Any]], language: str = "en"
+    ) -> str:
         """Extractive grounded answer: every claim comes from a retrieved
-        chunk, each tagged with its citation marker (FR-15 contract)."""
+        chunk, each tagged with its citation marker (FR-15 contract).
+        Non-English requests are recorded and surfaced honestly — real
+        translation needs a cloud LLM (Bedrock model path)."""
         parts = ["Here's what I found in the approved knowledge base:\n"]
         for i, item in enumerate(evidence, start=1):
             chunk = item["chunk"]
             parts.append(f"**{chunk['title']} — {chunk['section']}** [c{i}]\n{chunk['text']}\n")
         parts.append("Let me know if you'd like me to create a ticket for anything unresolved.")
+        if language != "en":
+            parts.append(
+                f"\n_(requested language: {language} — this deployment's local model "
+                "responds in English; a cloud LLM would translate with citations preserved)_"
+            )
         return "\n".join(parts)
 
     def respond(self, template_key: str, **kwargs: Any) -> str:

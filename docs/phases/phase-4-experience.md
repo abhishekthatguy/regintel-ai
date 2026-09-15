@@ -30,13 +30,25 @@ An employee uses the Angular app: sign-in via Entra ID, real-time streamed answe
 
 Voice, Genesys CX integration, CRM, additional-department onboarding at scale.
 
+## Status: ✅ local slice implemented
+
+| Area | Shipped | Enterprise gap |
+|---|---|---|
+| Angular 21 app (`ui/web/`) | Chat (NDJSON streaming via fetch/ReadableStream), tool-activity node trace, expandable citation cards, feedback buttons, conversation list/resume/rename, language selector, analytics page; Tailwind v4 styling; stub + JWT auth headers | MSAL/Entra login flow (uses bearer-token input today) |
+| Feedback loop (FR-20) | UI → `POST /v1/messages/{id}/feedback` → analytics aggregation | — |
+| Analytics (FR-25) | `GET /v1/admin/analytics`: totals, tokens, avg latency, feedback ratio, per-use-case usage, daily counts, not-found queries, recent feedback, recent audit | department/tenant scoping rides on Entra claims in cloud mode |
+| Multilingual (FR-22) | `language` param on send → model boundary; local model discloses English-only, Bedrock model translates with citations preserved; usage records language | OQ-04 language list to confirm |
+| Not-found tracking | `knowledge_not_found` audit records → knowledge-manager gap view | — |
+
 ## Exit criteria
 
-- [ ] UJ-01..UJ-06, UJ-08 pass in Angular against the cloud backend
-- [ ] Accessibility checklist verified on primary flows
-- [ ] Multilingual: response language selection works; evidence meaning preserved
-- [ ] Dashboard shows all required dimensions; feedback appears in analytics
-- [ ] Streamlit local demo still runs unchanged (evaluator path intact)
+- [x] Angular chat runs against the local backend end-to-end (stream, citations, feedback, conversations)
+- [x] Dashboard shows usage/feedback/latency/not-found dimensions; feedback appears in analytics
+- [x] Language selection works; evidence meaning preserved (citations stay original-language)
+- [x] Streamlit local demo still runs unchanged
+- [ ] UJ-01..UJ-06 pass in Angular against the **cloud** backend — needs deploy
+- [ ] Accessibility checklist verified — basic landmarks/labels/focus states present; formal a11y audit pending
+- [ ] Entra MSAL sign-in — pending Entra app registration
 
 ## Key risks
 
