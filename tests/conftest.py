@@ -37,7 +37,12 @@ def client(tmp_path, monkeypatch):
     from app.api import deps
 
     db = tmp_path / "test.db"
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    for f in SEED_DIR.glob("*.json"):
+        (seed / f.name).write_text(f.read_text())
     monkeypatch.setenv("REGINTEL_DB_PATH", str(db))
+    monkeypatch.setenv("REGINTEL_SEED_DIR", str(seed))
     get_settings.cache_clear()
     SQLiteStore(db).init_schema()
     seed_demo_data(db)

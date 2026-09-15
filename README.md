@@ -6,7 +6,7 @@ A configuration-driven agentic assistant: employees ask questions, get evidence-
 
 ## Status
 
-**Phase 5 — Expansion (local slice).** LangGraph agent with 4 tools (knowledge search, ticket lookup, ticket create, CRM lookup) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments (IT, HR, Finance) onboarded by config only; Streamlit + Angular UIs; golden eval suite.
+**Phase 6 — Pilot Readiness (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
 
 ## Setup
 
@@ -59,8 +59,9 @@ app/
   schemas/    Pydantic contracts: Message, Conversation, Citation, AgentState,
               ToolResult, UseCaseConfig, StreamEvent
   stores/     SQLiteStore + DynamoDBStore skeleton; audit_log, chunks, jobs
-  tools/      knowledge_search, ticket_lookup, ticket_create, crm_lookup
-  crm/        CRMAdapter interface + LocalCRMAdapter (JSON seed)
+  tools/      knowledge_search, ticket_lookup, ticket_create, crm_lookup,
+              crm_case_create behind ToolContext
+  crm/        CRMAdapter interface + LocalCRMAdapter (JSON seed, write-through)
   integrations/ genesys.py — agent-assist suggestion surface
   speech.py   SpeechProvider boundary (browser Web Speech / AWS skeleton)
   audit.py    NFR-12 audit records; cache.py FR-21 cache boundary
@@ -97,6 +98,7 @@ docs/         knowledge base + phase plans
 | `GET /v1/admin/ingestions` / `/{job_id}` | Ingestion job status + dead-lettered failures |
 | `GET /v1/admin/analytics` | Usage/feedback/latency/not-found aggregates (`admin` role) |
 | `POST /v1/integrations/genesys/suggest` | Agent-assist: `{utterance, usecase_id?}` → grounded suggestion + citations (stateless) |
+| `GET /v1/admin/usecases` / `/{id}` | Department-owner self-service: config, tools, guardrails, indexed docs, usage (`admin` role) |
 
 Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`.
 
@@ -111,7 +113,8 @@ Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e
 - Security-relevant actions write to the `audit_log` table (actor, action, outcome, config context).
 - Angular app (`ui/web/`) is the end-user surface; Entra MSAL login swaps in once the app registration exists (bearer-token input today). Multilingual selection is recorded and routed to the model boundary — the local model discloses English-only.
 - Multi-turn state persists in the SQLite checkpointer; per-employee ticket scoping is enforced server-side.
-- Phase 5: `crm_lookup` tool reads CRM cases via the `CRMAdapter` interface (`LocalCRMAdapter` over `data/seed/crm_cases.json`, scoped to the caller); disabled per use case via the same tool allowlist. CRM writes inherit the ticket-create safety contract when a target is chosen (OQ-04).
+- Phase 5/6: `crm_lookup` + `crm_case_create` tools via the `CRMAdapter` interface (`LocalCRMAdapter` over `data/seed/crm_cases.json`, scoped to the caller, write-through persisted). Case creation follows the identical safety contract as tickets: validation → duplicate check → explicit confirmation → idempotent write → audit. Disabled per use case via the server-side allowlist.
+- Advanced analytics: `/v1/admin/analytics` adds `by_department` (cost attribution), `funnel` (adoption), and `unmet_needs` (clustered not-found queries); surfaced on the Angular `/analytics` dashboard.
 - Voice: browser Web Speech API — mic transcription fills the draft and flows through the identical text pipeline (transcript preserved as the stored message); 🔊 reads responses aloud. `app/speech.py` is the provider boundary for AWS Transcribe/Polly when credentials exist.
 - Genesys: `/v1/integrations/genesys/suggest` is the agent-assist surface — utterance → grounded suggestion + citations, stateless, same auth as everything else. A real Genesys data action calls it with an OAuth JWT (JWT mode); org provisioning is pending OQ-01.
 - Third department: `finance_support` is YAML + Finance corpus + `e003` — zero new business logic (UJ-07).

@@ -26,6 +26,7 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [3](phases/phase-3-security-cloud.md) | Security & Cloud ✅ (local slice) | JWT auth, audit log, cloud-backend boundaries, Bedrock guardrail/model wiring, security suite |
 | [4](phases/phase-4-experience.md) | Production Experience ✅ (local slice) | Angular 21 UI, streaming UX, feedback, multilingual param, analytics API + dashboard |
 | [5](phases/phase-5-expansion.md) | Expansion ✅ (local slice) | Voice (Web Speech), Genesys agent-assist endpoint, CRM read tool, third department via config only |
+| [6](phases/phase-6-pilot-readiness.md) | Pilot Readiness ✅ (local slice) | CRM writes w/ full safety contract, dept cost attribution + funnel + unmet-need clustering, dept-owner self-service views |
 
 ## Guiding principle
 

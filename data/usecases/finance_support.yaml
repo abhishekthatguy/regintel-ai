@@ -23,6 +23,8 @@ tools:
     enabled: true
   - name: crm_lookup
     enabled: true
+  - name: crm_case_create
+    enabled: true
 filters:
   department: Finance
   allowed_sources: [local_files]

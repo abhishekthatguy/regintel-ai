@@ -23,6 +23,7 @@ from app.guardrails.checks import check_input, check_output
 from app.llm.base import (
     INTENT_CANCEL,
     INTENT_CONFIRM,
+    INTENT_CRM_CASE_CREATE,
     INTENT_CRM_LOOKUP,
     INTENT_DIRECT,
     INTENT_KNOWLEDGE,
@@ -66,9 +67,10 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     knowledge_tool = KnowledgeSearchTool()
     lookup_tool = TicketLookupTool()
     create_tool = TicketCreateTool()
-    from app.tools.crm import CRMLookupTool
+    from app.tools.crm import CRMCaseCreateTool, CRMLookupTool, validate_case_fields
 
     crm_tool = CRMLookupTool()
+    crm_create_tool = CRMCaseCreateTool()
 
     def req_ctx(state: GraphState) -> ToolContext:
         """Request-scoped tool context: shared stores/index + this turn's user.
@@ -103,6 +105,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         INTENT_TICKET_LOOKUP: "ticket_lookup",
         INTENT_TICKET_CREATE: "ticket_create",
         INTENT_CRM_LOOKUP: "crm_lookup",
+        INTENT_CRM_CASE_CREATE: "crm_case_create",
     }
 
     @node("classify")
@@ -136,12 +139,25 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                 "missing_fields": missing,
                 "awaiting_confirmation": False,
             }
+        elif intent == INTENT_CRM_CASE_CREATE:
+            fields = model.extract_case_fields(state["user_message"], state.get("fields", {}))
+            clean, missing = validate_case_fields(fields)
+            update["fields"] = clean
+            update["missing"] = missing
+            update["pending_action"] = {
+                "action_type": "crm_case_create",
+                "collected_fields": clean,
+                "missing_fields": missing,
+                "awaiting_confirmation": False,
+            }
         return update
 
     @node("clarify")
     def clarify(state: GraphState) -> dict:
-        missing = state.get("missing") or state["pending_action"]["missing_fields"]
-        return {"answer": model.respond("clarify", missing=", ".join(missing))}
+        pending = state.get("pending_action") or {}
+        missing = state.get("missing") or pending["missing_fields"]
+        template = "clarify_case" if pending.get("action_type") == "crm_case_create" else "clarify"
+        return {"answer": model.respond(template, missing=", ".join(missing))}
 
     @node("build_filters")
     def build_filters(state: GraphState) -> dict:
@@ -224,9 +240,27 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     @node("duplicate_check")
     def duplicate_check(state: GraphState) -> dict:
         try:
-            fields = state["pending_action"]["collected_fields"]
-            dup = req_ctx(state).store.find_duplicate_ticket(
-                req_ctx(state).user.employee_id, fields["category"]
+            pending = state["pending_action"]
+            fields = pending["collected_fields"]
+            rctx = req_ctx(state)
+            if pending.get("action_type") == "crm_case_create":
+                dup = rctx.crm.find_duplicate_case(rctx.user.employee_id, fields["subject"])
+                if dup:
+                    return {
+                        "answer": model.respond(
+                            "case_duplicate",
+                            case_id=dup["case_id"],
+                            status=dup["status"],
+                            priority=dup["priority"],
+                            subject=dup["subject"],
+                        ),
+                        "pending_action": None,
+                        "fields": {},
+                        "duplicate": True,
+                    }
+                return {"duplicate": False}
+            dup = rctx.store.find_duplicate_ticket(
+                rctx.user.employee_id, fields["category"]
             )
             if dup:
                 return {
@@ -251,15 +285,21 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         pending = dict(state["pending_action"])
         pending["awaiting_confirmation"] = True
         fields = pending["collected_fields"]
-        return {
-            "pending_action": pending,
-            "answer": model.respond(
+        if pending.get("action_type") == "crm_case_create":
+            answer = model.respond(
+                "confirm_case",
+                subject=fields["subject"],
+                priority=fields.get("priority", "medium"),
+                description=fields["description"],
+            )
+        else:
+            answer = model.respond(
                 "confirm",
                 category=fields["category"],
                 priority=fields.get("priority", "medium"),
                 description=fields["description"],
-            ),
-        }
+            )
+        return {"pending_action": pending, "answer": answer}
 
     @node("ticket_create")
     def ticket_create(state: GraphState) -> dict:
@@ -316,12 +356,63 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         except Exception as exc:
             return {"error": f"ticket_create:{exc}"}
 
+    @node("crm_case_create")
+    def crm_case_create(state: GraphState) -> dict:
+        try:
+            pending = state.get("pending_action") or {}
+            fields, missing = validate_case_fields(pending.get("collected_fields", {}))
+            if missing:
+                return {
+                    "answer": model.respond("clarify_case", missing=", ".join(missing)),
+                    "pending_action": {**pending, "missing_fields": missing, "awaiting_confirmation": False},
+                }
+            rctx = req_ctx(state)
+            idem = f"{rctx.user.employee_id}:{fields['subject'][:40]}"
+            result = crm_create_tool.run(rctx, fields, idempotency_key=idem)
+            case = result["case"]
+            if not result["created"]:
+                return {
+                    "answer": model.respond(
+                        "case_duplicate",
+                        case_id=case["case_id"],
+                        status=case["status"],
+                        priority=case["priority"],
+                        subject=case["subject"],
+                    ),
+                    "pending_action": None,
+                    "fields": {},
+                }
+            from app.audit import record_audit
+
+            record_audit(
+                rctx.store,
+                actor=rctx.user.employee_id,
+                action="crm_case_create",
+                outcome=case["case_id"],
+                detail={
+                    "priority": case["priority"],
+                    "usecase": ctx.usecase.usecase_id,
+                    "idempotency_key": idem,
+                },
+            )
+            return {
+                "answer": model.respond(
+                    "case_created",
+                    case_id=case["case_id"],
+                    priority=case["priority"],
+                ),
+                "pending_action": None,
+                "fields": {},
+            }
+        except Exception as exc:
+            return {"error": f"crm_case_create:{exc}"}
+
     @node("generate")
     def generate(state: GraphState) -> dict:
+        if state.get("answer"):
+            return {}  # not_found/tool_disabled etc. already composed upstream
         if state.get("intent") == INTENT_DIRECT:
             return {"answer": model.respond("greeting", name=state["user"]["name"].split()[0])}
-        if state.get("answer"):
-            return {}  # not_found etc. already composed upstream
         return {
             "answer": model.generate_grounded(
                 state.get("evidence", []), language=state.get("language", "en")
@@ -376,12 +467,13 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         if intent == INTENT_CRM_LOOKUP:
             return "crm_lookup"
         if intent == INTENT_CONFIRM:
-            return "ticket_create"
+            action_type = (state.get("pending_action") or {}).get("action_type")
+            return "crm_case_create" if action_type == "crm_case_create" else "ticket_create"
         if intent in (INTENT_CANCEL, "reconfirm"):
             if intent == "reconfirm" and state.get("pending_action"):
                 return "confirm_action"
             return "guardrail"  # cancelled: answer already set
-        if intent == INTENT_TICKET_CREATE:
+        if intent in (INTENT_TICKET_CREATE, INTENT_CRM_CASE_CREATE):
             return "clarify" if state.get("missing") else "duplicate_check"
         return "generate"
 
@@ -408,6 +500,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         ("duplicate_check", duplicate_check),
         ("confirm_action", confirm_action),
         ("ticket_create", ticket_create),
+        ("crm_case_create", crm_case_create),
         ("generate", generate),
         ("guardrail", guardrail),
         ("error_handler", error_handler),
@@ -426,6 +519,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     builder.add_conditional_edges("duplicate_check", route_duplicate)
     builder.add_edge("confirm_action", "guardrail")
     builder.add_conditional_edges("ticket_create", lambda s: route_after_tool(s, "guardrail"))
+    builder.add_conditional_edges("crm_case_create", lambda s: route_after_tool(s, "guardrail"))
     builder.add_edge("generate", "guardrail")
     builder.add_edge("error_handler", "guardrail")
     builder.add_edge("guardrail", "respond")

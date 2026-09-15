@@ -26,6 +26,34 @@
 
     <section class="mt-6 grid gap-4 md:grid-cols-2">
       <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Adoption funnel</h2>
+        <ul class="space-y-1.5 text-sm">
+          <li class="flex justify-between"><span class="text-slate-400">active users</span><span>{{ funnel['users'] }}</span></li>
+          <li class="flex justify-between"><span class="text-slate-400">conversations</span><span>{{ funnel['conversations'] }}</span></li>
+          <li class="flex justify-between"><span class="text-slate-400">user messages</span><span>{{ funnel['user_messages'] }}</span></li>
+          <li class="flex justify-between"><span class="text-slate-400">feedback given</span><span>{{ funnel['feedback'] }}</span></li>
+        </ul>
+      </div>
+
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Cost by department</h2>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-xs text-slate-500">
+            <th class="pb-2">dept</th><th class="pb-2">convs</th><th class="pb-2">msgs</th><th class="pb-2">tokens</th><th class="pb-2">cost</th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let d of byDepartment" class="border-t border-slate-700/60">
+              <td class="py-1.5">{{ d['department'] }}</td>
+              <td>{{ d['conversations'] }}</td>
+              <td>{{ d['messages'] }}</td>
+              <td>{{ d['tokens'] }}</td>
+              <td>${{ d['cost_usd'] }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
         <h2 class="mb-3 text-sm font-medium text-slate-300">Usage by use case</h2>
         <table class="w-full text-sm">
           <thead><tr class="text-left text-xs text-slate-500">
@@ -59,6 +87,18 @@
             <span class="ml-2 text-slate-300">{{ f['comment'] || f['reason'] || '—' }}</span>
           </li>
           <li *ngIf="!recentFeedback.length" class="text-slate-500">none yet</li>
+        </ul>
+      </div>
+
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <h2 class="mb-3 text-sm font-medium text-slate-300">Unmet-need clusters <span class="text-xs text-slate-500">(recurring gaps)</span></h2>
+        <ul class="space-y-1.5 text-sm">
+          <li *ngFor="let c of unmetNeeds">
+            <span class="font-medium text-amber-300">{{ c['term'] }}</span>
+            <span class="ml-1 text-slate-500">×{{ c['count'] }}</span>
+            <span class="ml-2 text-slate-400">{{ $any(c['sample_queries'])[0] }}</span>
+          </li>
+          <li *ngIf="!unmetNeeds.length" class="text-slate-500">no recurring gaps</li>
         </ul>
       </div>
     </section>

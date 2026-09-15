@@ -26,6 +26,7 @@ def test_loads_it_support(loader):
         "ticket_lookup",
         "ticket_create",
         "crm_lookup",
+        "crm_case_create",
     ]
 
 

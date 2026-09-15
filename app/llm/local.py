@@ -4,6 +4,7 @@ from typing import Any
 from app.llm.base import (
     INTENT_CANCEL,
     INTENT_CONFIRM,
+    INTENT_CRM_CASE_CREATE,
     INTENT_CRM_LOOKUP,
     INTENT_DIRECT,
     INTENT_KNOWLEDGE,
@@ -49,6 +50,11 @@ CRM_LOOKUP_RE = re.compile(
     r"|\b(status|show|check)\b.*\bcase(s)?\b",
     re.IGNORECASE,
 )
+CRM_CREATE_RE = re.compile(
+    r"\b(create|open|raise|file|submit|log|new)\b.*\b(customer|crm)?\s*case(s)?\b"
+    r"|\bcase(s)?\b.*\b(create|open|raise|file|submit|new)\b",
+    re.IGNORECASE,
+)
 DIRECT_RE = re.compile(
     r"^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks|thank you|bye|help)\b",
     re.IGNORECASE,
@@ -75,9 +81,12 @@ class LocalChatModel:
             if pending.get("awaiting_confirmation"):
                 # Unrecognized reply while awaiting confirmation: re-ask.
                 return INTENT_CONFIRM if self._is_confirm(message) else "reconfirm"
-            return INTENT_TICKET_CREATE  # treat as field collection
+            # Continue collecting fields for whichever action is pending.
+            return pending.get("action_type") or INTENT_TICKET_CREATE
         if TICKET_LOOKUP_RE.search(message):
             return INTENT_TICKET_LOOKUP
+        if CRM_CREATE_RE.search(message):
+            return INTENT_CRM_CASE_CREATE
         if CRM_LOOKUP_RE.search(message):
             return INTENT_CRM_LOOKUP
         if TICKET_CREATE_RE.search(message):
@@ -121,6 +130,29 @@ class LocalChatModel:
     @staticmethod
     def _looks_like_command(message: str) -> bool:
         return bool(TICKET_CREATE_RE.search(message) or TICKET_LOOKUP_RE.search(message))
+
+    def extract_case_fields(self, message: str, fields: dict[str, Any]) -> dict[str, Any]:
+        """CRM case fields: subject + description (required), priority
+        (optional). Subject comes from 'about/regarding/for <topic>' or the
+        command-stripped text; the user's own words become the description."""
+        merged = dict(fields)
+        lowered = message.lower()
+        for priority, keywords in PRIORITY_KEYWORDS.items():
+            if any(k in lowered for k in keywords):
+                merged["priority"] = priority
+                break
+        body = CRM_CREATE_RE.sub("", message).strip(" .:-")
+        body = re.sub(r"^(a|an|the|my)\s+", "", body)
+        m = re.search(r"\b(about|regarding|for|titled|re)\b[:\s]+(.+)", body, re.IGNORECASE)
+        if "subject" not in merged and m:
+            merged["subject"] = m.group(2).strip()[:80]
+        elif "subject" not in merged and body:
+            merged["subject"] = body[:80]
+        if "description" not in merged:
+            # Strip the command phrase — the substance is the description.
+            desc = re.sub(r"^(about|regarding|for|titled|re)\b[:\s]+", "", body)
+            merged["description"] = desc or message.strip()
+        return merged
 
     # --- generation -----------------------------------------------------
 
@@ -174,6 +206,23 @@ TEMPLATES = {
     "ticket_list": "{lines}",
     "ticket_none": "You have no {scope}tickets on record.",
     "crm_none": "I couldn't find a matching CRM case on your account.",
+    "clarify_case": (
+        "I can log that CRM case — I still need: {missing}. "
+        "Please provide it and I'll continue."
+    ),
+    "confirm_case": (
+        "I'll log a **{priority}** priority CRM case:\n"
+        "> **{subject}** — {description}\n\nConfirm? (yes/no)"
+    ),
+    "case_created": (
+        "Done — CRM case **{case_id}** logged ({priority} priority). "
+        "It's now on your account. Anything else?"
+    ),
+    "case_duplicate": (
+        "You already have an open case for that: **{case_id}** "
+        "({status}, {priority} priority) — “{subject}”. "
+        "I've reused it instead of creating a duplicate."
+    ),
     "not_found": (
         "I couldn't find evidence for that in the approved knowledge base, so I "
         "won't guess. You can ask me to create a support ticket and a human "

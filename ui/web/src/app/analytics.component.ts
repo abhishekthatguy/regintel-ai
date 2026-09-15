@@ -33,4 +33,13 @@ export class AnalyticsComponent implements OnInit {
   get recentFeedback(): Record<string, unknown>[] {
     return (this.data()?.['recent_feedback'] as Record<string, unknown>[]) ?? [];
   }
+  get byDepartment(): Record<string, unknown>[] {
+    return (this.data()?.['by_department'] as Record<string, unknown>[]) ?? [];
+  }
+  get funnel(): Record<string, unknown> {
+    return (this.data()?.['funnel'] as Record<string, unknown>) ?? {};
+  }
+  get unmetNeeds(): Record<string, unknown>[] {
+    return (this.data()?.['unmet_needs'] as Record<string, unknown>[]) ?? [];
+  }
 }

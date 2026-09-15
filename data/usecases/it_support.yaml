@@ -21,6 +21,8 @@ tools:
     enabled: true
   - name: crm_lookup
     enabled: true
+  - name: crm_case_create
+    enabled: true
 filters:
   department: IT
   allowed_sources: [local_files]

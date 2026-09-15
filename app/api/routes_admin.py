@@ -1,9 +1,9 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_identity, get_store
+from app.api.deps import get_identity, get_store, get_usecase_loader
 from app.ingestion.graph_source import GraphSourceAdapter
 from app.ingestion.local_files import LocalFileAdapter
 from app.ingestion.opentext import OpenTextAdapter
@@ -94,8 +94,58 @@ def analytics(
     return {
         "summary": store.analytics_summary(),
         "by_usecase": store.analytics_by_usecase(),
+        "by_department": store.analytics_by_department(),
+        "funnel": store.analytics_funnel(),
+        "unmet_needs": store.analytics_unmet_needs(),
         "daily": store.analytics_daily(),
         "not_found_queries": store.analytics_not_found(),
         "recent_feedback": store.analytics_feedback_recent(),
         "audit_recent": store.list_audit_records(limit=20),
+    }
+
+
+@router.get("/usecases")
+def list_usecases(
+    _admin: Annotated[UserContext, Depends(require_admin)],
+    loader: Annotated[Any, Depends(get_usecase_loader)],
+) -> dict:
+    """Department-owner self-service: every configured use case with its
+    department, tools, guardrails, and access rules."""
+    return {
+        "usecases": [
+            {
+                "usecase_id": c.usecase_id,
+                "name": c.name,
+                "department": c.department,
+                "version": c.version,
+                "tools": [
+                    {"name": t.name, "enabled": t.enabled} for t in c.tools
+                ],
+                "filters": {"department": c.filters.department},
+                "guardrails": {
+                    "input_checks": c.guardrails.input_checks,
+                    "output_checks": c.guardrails.output_checks,
+                },
+            }
+            for c in (loader.get(u) for u in loader.list_usecases())
+        ]
+    }
+
+
+@router.get("/usecases/{usecase_id}")
+def usecase_detail(
+    usecase_id: str,
+    _admin: Annotated[UserContext, Depends(require_admin)],
+    store: Annotated[SQLiteStore, Depends(get_store)],
+    loader: Annotated[Any, Depends(get_usecase_loader)],
+) -> dict:
+    """One use case's full config + its department's indexed documents + usage."""
+    try:
+        config = loader.get(usecase_id)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "config": config.model_dump(mode="json"),
+        "documents": store.department_documents(config.filters.department or config.department),
+        "usage": store.usecase_usage(usecase_id),
     }

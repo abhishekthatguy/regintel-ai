@@ -563,6 +563,83 @@ class SQLiteStore:
             for r in rows
         ]
 
+    def analytics_by_department(self) -> list[dict]:
+        """Cost attribution: usage grouped by the caller's department."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT COALESCE(e.department, 'unknown') AS department,"
+                " COUNT(DISTINCT c.conversation_id) AS conversations,"
+                " COUNT(m.message_id) AS messages,"
+                " COALESCE(SUM(json_extract(m.usage_json,'$.total_tokens')),0) AS tokens,"
+                " COALESCE(SUM(json_extract(m.usage_json,'$.estimated_cost_usd')),0) AS cost_usd"
+                " FROM conversations c"
+                " LEFT JOIN employees e ON e.employee_id = c.user_id"
+                " LEFT JOIN messages m ON m.conversation_id = c.conversation_id"
+                "   AND m.role = 'assistant'"
+                " GROUP BY department"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def analytics_funnel(self) -> dict:
+        """Adoption funnel: active users → conversations → messages → feedback."""
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT c.user_id) AS users,"
+                " COUNT(DISTINCT c.conversation_id) AS conversations,"
+                " (SELECT COUNT(*) FROM messages WHERE role='user') AS user_messages,"
+                " (SELECT COUNT(*) FROM feedback) AS feedback"
+                " FROM conversations c"
+            ).fetchone()
+        return dict(row)
+
+    def analytics_unmet_needs(self, limit: int = 10) -> list[dict]:
+        """Cluster not-found queries by shared dominant term — the content-gap
+        signal for knowledge managers."""
+        queries = [r["query"].lower() for r in self.analytics_not_found(limit=200)]
+        stop = {
+            "the", "a", "an", "how", "do", "i", "to", "is", "what", "my", "can",
+            "for", "of", "in", "on", "and", "me", "it", "does", "are", "there",
+            "get", "you", "we", "this", "that", "when", "where", "why",
+        }
+        clusters: dict[str, list[str]] = {}
+        for q in queries:
+            terms = [t for t in q.split() if t not in stop and len(t) > 3]
+            for t in terms:
+                clusters.setdefault(t, []).append(q)
+        ranked = sorted(
+            (
+                {"term": t, "count": len(qs), "sample_queries": sorted(set(qs))[:3]}
+                for t, qs in clusters.items()
+            ),
+            key=lambda c: -c["count"],
+        )
+        return [c for c in ranked if c["count"] > 1][:limit]
+
+    def department_documents(self, department: str) -> list[dict]:
+        """Distinct documents carrying this department's metadata — title/ACL
+        live on chunks, so aggregate to one row per document."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT document_id AS doc_id, title, department, acl_json AS acl,"
+                " version, source_system"
+                " FROM chunks WHERE department = ? GROUP BY document_id"
+                " ORDER BY doc_id",
+                (department,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def usecase_usage(self, usecase_id: str) -> dict:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT c.conversation_id) AS conversations,"
+                " COUNT(m.message_id) AS messages"
+                " FROM conversations c LEFT JOIN messages m"
+                "   ON m.conversation_id = c.conversation_id AND m.role = 'assistant'"
+                " WHERE c.usecase_id = ?",
+                (usecase_id,),
+            ).fetchone()
+        return dict(row)
+
     def analytics_feedback_recent(self, limit: int = 20) -> list[dict]:
         with self._session() as conn:
             rows = conn.execute(
