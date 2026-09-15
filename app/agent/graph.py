@@ -23,6 +23,7 @@ from app.guardrails.checks import check_input, check_output
 from app.llm.base import (
     INTENT_CANCEL,
     INTENT_CONFIRM,
+    INTENT_CRM_LOOKUP,
     INTENT_DIRECT,
     INTENT_KNOWLEDGE,
     INTENT_TICKET_CREATE,
@@ -65,6 +66,9 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     knowledge_tool = KnowledgeSearchTool()
     lookup_tool = TicketLookupTool()
     create_tool = TicketCreateTool()
+    from app.tools.crm import CRMLookupTool
+
+    crm_tool = CRMLookupTool()
 
     def req_ctx(state: GraphState) -> ToolContext:
         """Request-scoped tool context: shared stores/index + this turn's user.
@@ -98,6 +102,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         INTENT_KNOWLEDGE: "knowledge_search",
         INTENT_TICKET_LOOKUP: "ticket_lookup",
         INTENT_TICKET_CREATE: "ticket_create",
+        INTENT_CRM_LOOKUP: "crm_lookup",
     }
 
     @node("classify")
@@ -189,6 +194,32 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             return {"answer": model.respond("ticket_list", lines="\n".join(lines))}
         except Exception as exc:
             return {"error": f"ticket_lookup:{exc}"}
+
+    @node("crm_lookup")
+    def crm_lookup(state: GraphState) -> dict:
+        try:
+            rctx = req_ctx(state)
+            result = crm_tool.run(rctx, state["user_message"])
+            from app.audit import record_audit
+
+            record_audit(
+                rctx.store,
+                actor=rctx.user.employee_id,
+                action="crm_lookup",
+                outcome="ok" if result["found"] else "not_found",
+                detail={"usecase": rctx.usecase.usecase_id},
+            )
+            if not result["found"]:
+                return {"answer": model.respond("crm_none")}
+            lines = ["Here are your CRM cases:\n"]
+            for c in result["cases"]:
+                lines.append(
+                    f"- **{c['case_id']}** · {c['status']} · {c['priority']} — "
+                    f"{c['subject']} ({c['account']})"
+                )
+            return {"answer": model.respond("ticket_list", lines="\n".join(lines))}
+        except Exception as exc:
+            return {"error": f"crm_lookup:{exc}"}
 
     @node("duplicate_check")
     def duplicate_check(state: GraphState) -> dict:
@@ -342,6 +373,8 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             return "build_filters"
         if intent == INTENT_TICKET_LOOKUP:
             return "ticket_lookup"
+        if intent == INTENT_CRM_LOOKUP:
+            return "crm_lookup"
         if intent == INTENT_CONFIRM:
             return "ticket_create"
         if intent in (INTENT_CANCEL, "reconfirm"):
@@ -371,6 +404,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         ("build_filters", build_filters),
         ("retrieve", retrieve),
         ("ticket_lookup", ticket_lookup),
+        ("crm_lookup", crm_lookup),
         ("duplicate_check", duplicate_check),
         ("confirm_action", confirm_action),
         ("ticket_create", ticket_create),
@@ -388,6 +422,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     builder.add_edge("build_filters", "retrieve")
     builder.add_conditional_edges("retrieve", lambda s: route_after_tool(s, "generate"))
     builder.add_conditional_edges("ticket_lookup", lambda s: route_after_tool(s, "guardrail"))
+    builder.add_conditional_edges("crm_lookup", lambda s: route_after_tool(s, "guardrail"))
     builder.add_conditional_edges("duplicate_check", route_duplicate)
     builder.add_edge("confirm_action", "guardrail")
     builder.add_conditional_edges("ticket_create", lambda s: route_after_tool(s, "guardrail"))

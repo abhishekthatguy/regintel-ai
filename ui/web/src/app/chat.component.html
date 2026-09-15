@@ -7,6 +7,7 @@
           [ngModel]="api.employee()" (ngModelChange)="api.employee.set($event); refreshConversations()">
         <option value="e001">e001 — Asha (IT)</option>
         <option value="e002">e002 — Rahul (HR)</option>
+        <option value="e003">e003 — Meera (Finance)</option>
         <option value="e999">e999 — Admin (IT)</option>
       </select>
     </div>
@@ -21,6 +22,7 @@
       <select id="usecase" class="w-full rounded bg-slate-900 p-2 text-sm" [(ngModel)]="usecaseId">
         <option value="it_support">IT Support</option>
         <option value="hr_support">HR Policy</option>
+        <option value="finance_support">Finance</option>
       </select>
     </div>
     <div>
@@ -85,6 +87,8 @@
               (click)="feedback(m, 'up')" aria-label="Helpful">👍</button>
           <button class="rounded px-2 py-0.5" [class.text-rose-400]="m.feedback === 'down'"
               (click)="feedback(m, 'down')" aria-label="Not helpful">👎</button>
+          <button *ngIf="ttsSupported" class="rounded px-2 py-0.5 text-slate-400 hover:text-slate-200"
+              (click)="speak(m)" aria-label="Read aloud">🔊</button>
           <span *ngIf="m.usage" class="text-slate-500">
             {{ m.usage['total_tokens'] }} tok · {{ m.usage['latency_ms'] }}ms · {{ m.usage['language'] }}
           </span>
@@ -105,6 +109,13 @@
           placeholder="Ask about knowledge, tickets, or create a ticket…"
           aria-label="Message"
           class="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+      <button *ngIf="voiceSupported" type="button" (click)="toggleMic()"
+          [class.animate-pulse]="listening()" [class.text-rose-400]="listening()"
+          [attr.aria-pressed]="listening()"
+          aria-label="Voice input"
+          class="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:border-indigo-500">
+        🎤
+      </button>
       <button type="submit" [disabled]="busy() || !draft.trim()"
           class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40">
         Send

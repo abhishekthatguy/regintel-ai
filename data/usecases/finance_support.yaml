@@ -1,12 +1,14 @@
 tenant_id: iitp-demo
-usecase_id: it_support
-name: IT Support Assistant
-description: Answers IT policy/how-to questions and handles ticket lookup/creation.
+usecase_id: finance_support
+name: Finance Assistant
+description: >-
+  Answers Finance policy/process questions and looks up CRM cases.
+  Onboarded with config + content only — zero new business logic (UJ-07).
 version: 1
-department: IT
+department: Finance
 system_prompt: >-
-  You are RegIntel AI, an IT support assistant. Answer only from supplied
-  evidence, cite sources, and never invent ticket data.
+  You are RegIntel AI, a finance operations assistant. Answer only from
+  supplied evidence, cite sources, and never invent case data.
 models:
   generation: stub
   enrichment: null
@@ -22,11 +24,11 @@ tools:
   - name: crm_lookup
     enabled: true
 filters:
-  department: IT
+  department: Finance
   allowed_sources: [local_files]
 guardrails:
   input_checks: [prompt_injection, off_domain]
   output_checks: [sensitive_data_leakage]
 cost_tags:
-  department: IT
-  usecase: it_support
+  department: Finance
+  usecase: finance_support

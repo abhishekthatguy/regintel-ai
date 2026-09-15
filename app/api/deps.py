@@ -50,9 +50,12 @@ RUNNERS: list[LangGraphRunner] = []
 
 
 @lru_cache
-def _runner_for(db_path: str, knowledge_dir: str) -> LangGraphRunner:
+def _runner_for(db_path: str, knowledge_dir: str, seed_dir: str) -> LangGraphRunner:
+    from app.crm.local import LocalCRMAdapter
+
     store = _store_for(db_path)
     ensure_ingested(store, Path(knowledge_dir))
+    crm = LocalCRMAdapter(Path(seed_dir) / "crm_cases.json")
 
     def ctx_factory(usecase) -> ToolContext:
         return ToolContext(
@@ -61,6 +64,7 @@ def _runner_for(db_path: str, knowledge_dir: str) -> LangGraphRunner:
             store=store,
             embedder=get_embedder(usecase.models.embedding),
             reranker=get_reranker(usecase.models.rerank),
+            crm=crm,
         )
 
     runner = LangGraphRunner(ctx_factory, get_chat_model(), db_path)
@@ -77,7 +81,9 @@ def get_usecase_loader(settings: Annotated[Settings, Depends(get_settings)]) -> 
 
 
 def get_agent_runner(settings: Annotated[Settings, Depends(get_settings)]) -> AgentRunner:
-    return _runner_for(str(settings.db_path), str(settings.knowledge_dir))
+    return _runner_for(
+        str(settings.db_path), str(settings.knowledge_dir), str(settings.seed_dir)
+    )
 
 
 async def get_identity(

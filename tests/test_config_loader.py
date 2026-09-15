@@ -13,15 +13,26 @@ def loader():
     return UseCaseLoader(get_settings().usecase_dir)
 
 
-def test_lists_both_usecases(loader):
-    assert loader.list_usecases() == ["hr_support", "it_support"]
+def test_lists_all_usecases(loader):
+    assert loader.list_usecases() == ["finance_support", "hr_support", "it_support"]
 
 
 def test_loads_it_support(loader):
     config = loader.get("it_support")
     assert config.usecase_id == "it_support"
     assert config.department == "IT"
-    assert config.enabled_tools() == ["knowledge_search", "ticket_lookup", "ticket_create"]
+    assert config.enabled_tools() == [
+        "knowledge_search",
+        "ticket_lookup",
+        "ticket_create",
+        "crm_lookup",
+    ]
+
+
+def test_finance_usecase_loads(loader):
+    config = loader.get("finance_support")
+    assert config.department == "Finance"
+    assert "crm_lookup" in config.enabled_tools()
 
 
 def test_hr_has_ticket_tools_disabled(loader):

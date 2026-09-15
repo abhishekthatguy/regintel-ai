@@ -1,0 +1,6 @@
+[
+  {"case_id": "CASE-7001", "owner": "e001", "subject": "Vendor onboarding access", "status": "open", "priority": "high", "account": "Acme Corp", "updated_at": "2026-09-10T09:00:00Z"},
+  {"case_id": "CASE-7002", "owner": "e001", "subject": "Q3 budget variance question", "status": "in_progress", "priority": "medium", "account": "Internal", "updated_at": "2026-09-12T14:30:00Z"},
+  {"case_id": "CASE-7003", "owner": "e003", "subject": "Invoice approval workflow", "status": "open", "priority": "medium", "account": "Globex", "updated_at": "2026-09-13T11:15:00Z"},
+  {"case_id": "CASE-7004", "owner": "e002", "subject": "Benefits enrollment window", "status": "closed", "priority": "low", "account": "Internal", "updated_at": "2026-09-08T16:45:00Z"}
+]

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     knowledge_dir: Path = PROJECT_ROOT / "data" / "knowledge"
     default_usecase: str = "it_support"
     default_employee: str = "e001"
+    seed_dir: Path = PROJECT_ROOT / "data" / "seed"
 
     # --- Phase 3: auth / cloud backend switches ---
     # "stub" keeps the X-Demo-Employee header path; "jwt" requires a Bearer

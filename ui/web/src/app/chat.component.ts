@@ -3,6 +3,18 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, ChatMessage } from './api.service';
 
+// Web Speech API isn't in the TS DOM lib — minimal local types.
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  onresult: ((e: { results: { [k: number]: { [k: number]: { transcript: string } } } }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
 @Component({
   selector: 'app-chat',
   standalone: true,
@@ -22,6 +34,11 @@ export class ChatComponent implements OnInit {
   busy = signal(false);
   error = signal('');
   draft = '';
+  listening = signal(false);
+  voiceSupported = typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+  ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  private recognition: SpeechRecognitionLike | null = null;
 
   async ngOnInit() {
     await this.refreshConversations();
@@ -109,6 +126,41 @@ export class ChatComponent implements OnInit {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  toggleMic() {
+    if (!this.voiceSupported) return;
+    if (this.listening()) {
+      this.recognition?.stop();
+      return;
+    }
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    this.recognition = rec;
+    rec.lang = this.language === 'en' ? 'en-US' : this.language;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      // Transcript is the source of truth — flows through the same text pipeline.
+      this.draft = e.results[0][0].transcript;
+      this.listening.set(false);
+    };
+    rec.onerror = () => this.listening.set(false);
+    rec.onend = () => this.listening.set(false);
+    rec.start();
+    this.listening.set(true);
+  }
+
+  speak(msg: ChatMessage) {
+    if (!this.ttsSupported || !msg.content) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(msg.content);
+    u.lang = this.language === 'en' ? 'en-US' : this.language;
+    speechSynthesis.speak(u);
   }
 
   async feedback(msg: ChatMessage, rating: 'up' | 'down') {

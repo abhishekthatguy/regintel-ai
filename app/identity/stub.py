@@ -22,6 +22,14 @@ DEMO_EMPLOYEES: dict[str, UserContext] = {
         roles=["employee"],
         claims={"department": "HR", "auth": "stub"},
     ),
+    "e003": UserContext(
+        employee_id="e003",
+        name="Meera Joshi",
+        department="Finance",
+        email="meera.joshi@example.com",
+        roles=["employee"],
+        claims={"department": "Finance", "auth": "stub"},
+    ),
     "e999": UserContext(
         employee_id="e999",
         name="Admin Demo",

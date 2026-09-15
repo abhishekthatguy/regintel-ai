@@ -19,6 +19,8 @@ tools:
     enabled: false
   - name: ticket_create
     enabled: false
+  - name: crm_lookup
+    enabled: false
 filters:
   department: HR
   allowed_sources: [local_files]

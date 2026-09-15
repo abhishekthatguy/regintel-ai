@@ -31,11 +31,11 @@ Voice in/out with retained transcripts; the assistant surface available inside G
 
 ## Exit criteria
 
-- [ ] Voice I/O works; transcript preserved; citations still shown
-- [ ] Genesys integration demo path working (or documented decision if scope = AWS-only)
-- [ ] CRM tool passes the full write-safety checklist (validation/duplicates/confirmation/idempotency/audit)
-- [ ] Third department enabled with zero new business logic
-- [ ] Pilot readiness review + business owner approval
+- [x] Voice I/O works; transcript preserved; citations still shown — Web Speech API in Angular (mic → transcript → same text pipeline; TTS readback); `app/speech.py` `SpeechProvider` boundary with Polly/Transcribe skeleton
+- [x] Genesys integration demo path working — `POST /v1/integrations/genesys/suggest` (agent-assist surface: utterance → grounded suggestion + full citation contract, stateless). Real org/OAuth deployment still pending OQ-01; documented in `app/integrations/genesys.py`
+- [~] CRM tool passes the full write-safety checklist — **read-only slice shipped**: `CRMAdapter` interface + `LocalCRMAdapter` (JSON seed) + `crm_lookup` tool behind the server-side allowlist, scoped to `owner == employee_id`. Writes deferred — they inherit the ticket-create safety contract (validation/duplicates/confirmation/idempotency/audit) when a CRM target is chosen (OQ-04)
+- [x] Third department enabled with zero new business logic — `finance_support` use case = YAML + Finance corpus + `e003` employee; nothing else changed
+- [ ] Pilot readiness review + business owner approval — external sign-off, not code
 
 ## Key risks
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes_admin import router as admin_router
 from app.api.routes_conversations import router as conversations_router
 from app.api.routes_health import router as health_router
+from app.api.routes_integrations import router as integrations_router
 from app.logging_config import configure_logging
 from app.middleware import CorrelationIdMiddleware
 from app.settings import get_settings
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(conversations_router)
     app.include_router(admin_router)
+    app.include_router(integrations_router)
     return app
 
 

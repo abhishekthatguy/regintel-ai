@@ -4,6 +4,7 @@ from typing import Any
 from app.llm.base import (
     INTENT_CANCEL,
     INTENT_CONFIRM,
+    INTENT_CRM_LOOKUP,
     INTENT_DIRECT,
     INTENT_KNOWLEDGE,
     INTENT_TICKET_CREATE,
@@ -43,6 +44,11 @@ TICKET_LOOKUP_RE = re.compile(
     r"|\bTCK-\d+\b|\bmy (open )?tickets\b",
     re.IGNORECASE,
 )
+CRM_LOOKUP_RE = re.compile(
+    r"\bCASE-\d+\b|\b(customer|crm)\s+case(s)?\b|\bcase(s)?\b.*\b(status|show|check)\b"
+    r"|\b(status|show|check)\b.*\bcase(s)?\b",
+    re.IGNORECASE,
+)
 DIRECT_RE = re.compile(
     r"^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks|thank you|bye|help)\b",
     re.IGNORECASE,
@@ -72,6 +78,8 @@ class LocalChatModel:
             return INTENT_TICKET_CREATE  # treat as field collection
         if TICKET_LOOKUP_RE.search(message):
             return INTENT_TICKET_LOOKUP
+        if CRM_LOOKUP_RE.search(message):
+            return INTENT_CRM_LOOKUP
         if TICKET_CREATE_RE.search(message):
             return INTENT_TICKET_CREATE
         if DIRECT_RE.match(message):
@@ -165,6 +173,7 @@ TEMPLATES = {
     ),
     "ticket_list": "{lines}",
     "ticket_none": "You have no {scope}tickets on record.",
+    "crm_none": "I couldn't find a matching CRM case on your account.",
     "not_found": (
         "I couldn't find evidence for that in the approved knowledge base, so I "
         "won't guess. You can ask me to create a support ticket and a human "

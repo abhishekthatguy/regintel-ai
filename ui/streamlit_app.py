@@ -11,8 +11,13 @@ import httpx
 import streamlit as st
 
 API_BASE = os.getenv("REGINTEL_API_BASE", "http://localhost:8000")
-EMPLOYEES = {"e001 — Asha Verma (IT)": "e001", "e002 — Rahul Nair (HR)": "e002", "e999 — Admin (IT)": "e999"}
-USECASES = {"IT Support": "it_support", "HR Policy": "hr_support"}
+EMPLOYEES = {
+    "e001 — Asha Verma (IT)": "e001",
+    "e002 — Rahul Nair (HR)": "e002",
+    "e003 — Meera Joshi (Finance)": "e003",
+    "e999 — Admin (IT)": "e999",
+}
+USECASES = {"IT Support": "it_support", "HR Policy": "hr_support", "Finance": "finance_support"}
 
 st.set_page_config(page_title="RegIntel AI", page_icon="🤖")
 st.title("RegIntel AI")

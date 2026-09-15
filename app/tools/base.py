@@ -17,3 +17,4 @@ class ToolContext:
     store: SQLiteStore
     embedder: Any  # Embedder (app.retrieval.embeddings)
     reranker: Any  # Reranker (app.retrieval.rerank)
+    crm: Any  # CRMAdapter (app.crm.base)

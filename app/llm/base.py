@@ -4,6 +4,7 @@ from typing import Any, Protocol
 INTENT_KNOWLEDGE = "knowledge_query"
 INTENT_TICKET_LOOKUP = "ticket_lookup"
 INTENT_TICKET_CREATE = "ticket_create"
+INTENT_CRM_LOOKUP = "crm_lookup"
 INTENT_DIRECT = "direct"
 INTENT_CONFIRM = "confirm"
 INTENT_CANCEL = "cancel"
