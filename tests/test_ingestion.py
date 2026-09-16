@@ -25,9 +25,9 @@ def retriever(get_store):
 
 def test_ingestion_populates_chunks_vectors_checksums(get_store):
     store = get_store
-    assert len(store.all_chunks()) == 100
+    assert len(store.all_chunks()) == 101
     vectors = store.chunk_vectors()
-    assert len(vectors) == 100
+    assert len(vectors) == 101
     assert all(len(v) == 384 for v in vectors.values())
     assert store.document_checksum("KB-IT-001")
 

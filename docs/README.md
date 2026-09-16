@@ -27,6 +27,9 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [4](phases/phase-4-experience.md) | Production Experience ✅ (local slice) | Angular 21 UI, streaming UX, feedback, multilingual param, analytics API + dashboard |
 | [5](phases/phase-5-expansion.md) | Expansion ✅ (local slice) | Voice (Web Speech), Genesys agent-assist endpoint, CRM read tool, third department via config only |
 | [6](phases/phase-6-pilot-readiness.md) | Pilot Readiness ✅ (local slice) | CRM writes w/ full safety contract, dept cost attribution + funnel + unmet-need clustering, dept-owner self-service views |
+| [7](phases/phase-7-hardening.md) | Hardening & Handoff ✅ (local slice) | Self-service knowledge upload, P95 latency evidence, CRM/finance eval coverage, OpenAPI export + demo script |
+
+Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough.
 
 ## Guiding principle
 

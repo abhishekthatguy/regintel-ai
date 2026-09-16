@@ -11,6 +11,7 @@ from app.settings import get_settings
 from app.stores.sqlite import SQLiteStore
 
 SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seed"
+KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "data" / "knowledge"
 
 
 def seed_demo_data(db_path) -> None:
@@ -41,8 +42,13 @@ def client(tmp_path, monkeypatch):
     seed.mkdir()
     for f in SEED_DIR.glob("*.json"):
         (seed / f.name).write_text(f.read_text())
+    knowledge = tmp_path / "knowledge"
+    import shutil
+
+    shutil.copytree(KNOWLEDGE_DIR, knowledge)
     monkeypatch.setenv("REGINTEL_DB_PATH", str(db))
     monkeypatch.setenv("REGINTEL_SEED_DIR", str(seed))
+    monkeypatch.setenv("REGINTEL_KNOWLEDGE_DIR", str(knowledge))
     get_settings.cache_clear()
     SQLiteStore(db).init_schema()
     seed_demo_data(db)

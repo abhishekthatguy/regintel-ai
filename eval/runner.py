@@ -15,6 +15,8 @@ NODE_TOOL_MAP = {
     "retrieve": "knowledge_search",
     "ticket_lookup": "ticket_lookup",
     "ticket_create": "ticket_create",
+    "crm_lookup": "crm_lookup",
+    "crm_case_create": "crm_case_create",
 }
 
 
@@ -67,6 +69,8 @@ def run_case(client, case: dict) -> CaseResult:
             "knowledge_query": ["retrieve"],
             "ticket_lookup": ["ticket_lookup"],
             "ticket_create": ["clarify", "duplicate_check", "confirm_action", "ticket_create"],
+            "crm_lookup": ["crm_lookup"],
+            "crm_case_create": ["duplicate_check", "confirm_action", "crm_case_create"],
             "direct": ["generate"],
         }.get(case["expect_intent"], [])
         if expected_nodes and not any(n in all_nodes for n in expected_nodes):
@@ -74,7 +78,7 @@ def run_case(client, case: dict) -> CaseResult:
 
     if "expect_tool" in case:
         expected_nodes = [k for k, v in NODE_TOOL_MAP.items() if v == case["expect_tool"]]
-        if case["expect_tool"] == "ticket_create":
+        if case["expect_tool"] in ("ticket_create", "crm_case_create"):
             expected_nodes += ["duplicate_check", "confirm_action"]
         if not any(n in all_nodes for n in expected_nodes):
             fail(f"tool {case['expect_tool']}: no matching node in {all_nodes}")

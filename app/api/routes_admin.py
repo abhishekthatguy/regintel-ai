@@ -83,6 +83,59 @@ def get_ingestion(
     return job
 
 
+class KnowledgeUploadRequest(BaseModel):
+    filename: str
+    content: str
+
+
+@router.post("/knowledge", status_code=201)
+def upload_knowledge(
+    req: KnowledgeUploadRequest,
+    admin: Annotated[UserContext, Depends(require_admin)],
+    store: Annotated[SQLiteStore, Depends(get_store)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    """Department-owner self-service (FR-10/FR-27): upload one markdown doc
+    with front-matter → validated → lands in the corpus → re-ingested.
+    Checksum drift detection makes the run incremental."""
+    import re
+
+    import yaml
+
+    from app.retrieval.corpus import FRONT_MATTER
+
+    if not req.filename.endswith(".md") or "/" in req.filename or ".." in req.filename:
+        raise HTTPException(status_code=422, detail="filename must be a plain .md name")
+    match = FRONT_MATTER.match(req.content)
+    if not match:
+        raise HTTPException(status_code=422, detail="missing YAML front-matter")
+    meta = yaml.safe_load(match.group(1))
+    missing = [f for f in ("doc_id", "title", "department", "acl") if not meta.get(f)]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"front-matter missing: {missing}")
+    if not re.fullmatch(r"KB-[A-Z]+-\d+", str(meta["doc_id"])):
+        raise HTTPException(status_code=422, detail="doc_id must match KB-DEPT-NNN")
+    if not isinstance(meta["acl"], list) or not meta["acl"]:
+        raise HTTPException(status_code=422, detail="acl must be a non-empty list")
+
+    dept_dir = settings.knowledge_dir / str(meta["department"]).lower()
+    dept_dir.mkdir(parents=True, exist_ok=True)
+    (dept_dir / req.filename).write_text(req.content)
+
+    pipeline = IngestionPipeline(store, get_embedder())
+    result = pipeline.run(LocalFileAdapter(settings.knowledge_dir))
+    from app.audit import record_audit
+
+    record_audit(
+        store,
+        actor=admin.employee_id,
+        action="knowledge_upload",
+        outcome=str(meta["doc_id"]),
+        detail={"filename": req.filename, "department": meta["department"], "ingested": result["ingested"]},
+    )
+    return {"doc_id": meta["doc_id"], "path": str(dept_dir / req.filename), "ingestion": result}
+
+
 @router.get("/analytics")
 def analytics(
     _admin: Annotated[UserContext, Depends(require_admin)],

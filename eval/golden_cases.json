@@ -280,5 +280,80 @@
     "expect_citation_contract": true,
     "usecase": "hr_support",
     "employee": "e002"
+  },
+  {
+    "id": "R6-CRM-01",
+    "journey": "UJ-08",
+    "employee": "e001",
+    "turns": [
+      "check my case CASE-7001"
+    ],
+    "expect_intent": "crm_lookup",
+    "expect_tool": "crm_lookup",
+    "expect_contains": [
+      "CASE-7001"
+    ]
+  },
+  {
+    "id": "R6-CRM-02",
+    "journey": "UJ-08",
+    "employee": "e001",
+    "turns": [
+      "open a crm case about stale asset records",
+      "yes"
+    ],
+    "expect_tool": "crm_case_create",
+    "expect_contains": [
+      "CASE-"
+    ]
+  },
+  {
+    "id": "R6-CRM-03",
+    "journey": "UJ-08",
+    "employee": "e001",
+    "turns": [
+      "open a crm case about billing portal errors",
+      "no"
+    ],
+    "expect_contains": [
+      "cancelled"
+    ]
+  },
+  {
+    "id": "R6-CRM-04",
+    "journey": "UJ-08",
+    "employee": "e002",
+    "turns": [
+      "check my case CASE-7001"
+    ],
+    "expect_intent": "crm_lookup",
+    "expect_contains": [
+      "couldn't find"
+    ]
+  },
+  {
+    "id": "R6-FIN-01",
+    "journey": "UJ-07",
+    "employee": "e003",
+    "usecase": "finance_support",
+    "turns": [
+      "what is the corporate card policy"
+    ],
+    "expect_intent": "knowledge_query",
+    "expect_citations": true,
+    "expect_docs": [
+      "KB-FIN-002"
+    ]
+  },
+  {
+    "id": "R6-ACL-FIN",
+    "journey": "UJ-07",
+    "employee": "e001",
+    "turns": [
+      "what is the annual budget process"
+    ],
+    "expect_no_docs": [
+      "KB-FIN-003"
+    ]
   }
 ]

@@ -6,7 +6,7 @@ A configuration-driven agentic assistant: employees ask questions, get evidence-
 
 ## Status
 
-**Phase 6 — Pilot Readiness (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
+**Phase 7 — Hardening & Handoff (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
 
 ## Setup
 
@@ -78,7 +78,7 @@ data/
   usecases/   versioned use-case configs (it_support, hr_support, finance_support)
   seed/       demo employees + tickets + CRM cases
 eval/         golden_cases.json + rubric runner
-scripts/seed_db.py
+scripts/      seed_db.py, load_test.py (P95 vs NFR targets), export_openapi.py
 tests/
 docs/         knowledge base + phase plans
 ```
@@ -99,10 +99,11 @@ docs/         knowledge base + phase plans
 | `GET /v1/admin/analytics` | Usage/feedback/latency/not-found aggregates (`admin` role) |
 | `POST /v1/integrations/genesys/suggest` | Agent-assist: `{utterance, usecase_id?}` → grounded suggestion + citations (stateless) |
 | `GET /v1/admin/usecases` / `/{id}` | Department-owner self-service: config, tools, guardrails, indexed docs, usage (`admin` role) |
+| `POST /v1/admin/knowledge` | Upload a markdown doc w/ front-matter → validated → ingested (`admin` role) |
 
 Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`.
 
-## Notes / limitations (Phase 5)
+## Notes / limitations (Phase 7)
 
 - LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Bedrock Claude plugs in via `REGINTEL_LLM_PROVIDER=bedrock` (Converse API; self-degrades to local without credentials).
 - Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config.
@@ -118,3 +119,4 @@ Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e
 - Voice: browser Web Speech API — mic transcription fills the draft and flows through the identical text pipeline (transcript preserved as the stored message); 🔊 reads responses aloud. `app/speech.py` is the provider boundary for AWS Transcribe/Polly when credentials exist.
 - Genesys: `/v1/integrations/genesys/suggest` is the agent-assist surface — utterance → grounded suggestion + citations, stateless, same auth as everything else. A real Genesys data action calls it with an OAuth JWT (JWT mode); org provisioning is pending OQ-01.
 - Third department: `finance_support` is YAML + Finance corpus + `e003` — zero new business logic (UJ-07).
+- Phase 7: `POST /v1/admin/knowledge` lets dept owners upload markdown (validated front-matter, `KB-DEPT-NNN` doc IDs, safe filenames) — ingested and citable in the same pipeline. `scripts/load_test.py` measures P95 first-token/answer latency against NFR targets (local model: ~65/70ms). `scripts/export_openapi.py` + `docs/demo-script.md` are the handoff artifacts.
