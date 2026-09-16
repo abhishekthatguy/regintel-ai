@@ -30,7 +30,6 @@ from app.llm.base import (
     INTENT_TICKET_CREATE,
     INTENT_TICKET_LOOKUP,
 )
-from app.llm.local import FOLLOWUP_RE
 from app.schemas.config import UseCaseConfig
 from app.schemas.conversation import Citation
 from app.tools.base import ToolContext
@@ -167,9 +166,12 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     @node("retrieve")
     def retrieve(state: GraphState) -> dict:
         try:
-            query = state["user_message"]
-            if (FOLLOWUP_RE.match(query) or len(query.split()) <= 3) and state.get("last_topic"):
-                query = f"{state['last_topic']} {query}"
+            from app.retrieval.rewriter import get_rewriter
+
+            query = get_rewriter(ctx.usecase.models.enrichment).rewrite(
+                state["user_message"],
+                {"last_topic": state.get("last_topic"), "history": state.get("history", [])},
+            )
             result = knowledge_tool.run(req_ctx(state), query)
             if not result["found"]:
                 from app.audit import record_audit
@@ -439,6 +441,8 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             {"role": "user", "content": state["user_message"]},
             {"role": "assistant", "content": state.get("answer", "")},
         ]
+        from app.llm.pricing import estimate_cost
+
         usage = {
             "model": ctx.usecase.models.generation,
             "prompt_tokens": len(state["user_message"].split()) + 20 * len(history),
@@ -449,6 +453,9 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             "language": state.get("language", "en"),
         }
         usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+        usage["estimated_cost_usd"] = estimate_cost(
+            getattr(model, "model_id", ""), usage["prompt_tokens"], usage["completion_tokens"]
+        )
         return {"history": history[-40:], "usage": usage}
 
     # --- routing -----------------------------------------------------------

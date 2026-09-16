@@ -61,7 +61,20 @@ export class ChatComponent implements OnInit {
 
   async resume(id: string) {
     this.conversationId.set(id);
-    const detail = await this.api.getConversation(id);
+    this.error.set('');
+    let detail: Record<string, unknown>;
+    try {
+      detail = await this.api.getConversation(id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      this.error.set(
+        msg.includes('403')
+          ? 'That conversation belongs to a different employee — switch identity or start a new one.'
+          : 'Could not load the conversation — is the API running on :8000?',
+      );
+      this.conversationId.set(null);
+      return;
+    }
     const msgs = (detail['messages'] as Record<string, unknown>[]) ?? [];
     this.messages.set(
       msgs.map((m) => ({
@@ -71,6 +84,21 @@ export class ChatComponent implements OnInit {
         messageId: m['message_id'] as string,
       })),
     );
+  }
+
+  async exportConv() {
+    const id = this.conversationId();
+    if (!id) return;
+    try {
+      const blob = await this.api.exportConversation(id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${id}.md`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      this.error.set('Export failed — check your identity and that the API is running.');
+    }
   }
 
   async rename() {

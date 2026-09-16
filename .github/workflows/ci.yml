@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   test:
@@ -17,7 +17,18 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
-      - name: Test
+      - name: Test (unit + integration + golden eval suite)
         run: pytest -q
-# Phase 3+ adds: typecheck, rubric regression, build, Nexus IQ policy scan,
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install + build Angular
+        working-directory: ui/web
+        run: npm ci && npm run build
+# Phase 3+ adds: typecheck, rubric regression, Nexus IQ policy scan,
 # JFrog artifact publish — per docs/phases and BRD §18.

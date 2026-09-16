@@ -47,6 +47,9 @@ class BedrockChatModel:
     def extract_fields(self, message: str, fields: dict[str, Any]) -> dict[str, Any]:
         return self._fallback.extract_fields(message, fields)
 
+    def extract_case_fields(self, message: str, fields: dict[str, Any]) -> dict[str, Any]:
+        return self._fallback.extract_case_fields(message, fields)
+
     def respond(self, template: str, **kwargs) -> str:
         return self._fallback.respond(template, **kwargs)
 

@@ -59,7 +59,6 @@ DIRECT_RE = re.compile(
     r"^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks|thank you|bye|help)\b",
     re.IGNORECASE,
 )
-FOLLOWUP_RE = re.compile(r"^(what about|how about|and for|and what|what if|also)", re.IGNORECASE)
 
 
 class LocalChatModel:
@@ -177,6 +176,11 @@ class LocalChatModel:
 
     def respond(self, template_key: str, **kwargs: Any) -> str:
         return TEMPLATES[template_key].format(**kwargs)
+
+    def generate(self, messages: list[dict[str, str]]) -> str:
+        """Freeform generation boundary — the local model only supports the
+        template/grounded paths; real freeform needs a cloud LLM."""
+        return messages[-1]["content"] if messages else ""
 
 
 TEMPLATES = {

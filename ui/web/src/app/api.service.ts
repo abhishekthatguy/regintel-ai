@@ -84,6 +84,14 @@ export class ApiService {
     });
   }
 
+  async exportConversation(id: string): Promise<Blob> {
+    const r = await fetch(`${API_BASE}/v1/conversations/${id}/export`, {
+      headers: this.headers(),
+    });
+    if (!r.ok) throw new Error(`export failed: ${r.status}`);
+    return r.blob();
+  }
+
   async analytics(): Promise<Record<string, unknown>> {
     const r = await fetch(`${API_BASE}/v1/admin/analytics`, { headers: this.headers() });
     if (!r.ok) throw new Error(`analytics failed: ${r.status}`);

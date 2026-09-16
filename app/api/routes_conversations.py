@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from app.api.deps import IdentityDep, RunnerDep, SettingsDep, StoreDep, UseCaseDep
 from app.config.loader import UseCaseNotFoundError
@@ -154,6 +154,49 @@ async def stream_message(
         yield complete_event(assistant_msg.message_id, conversation_id).to_ndjson()
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@router.get("/conversations/{conversation_id}/export")
+def export_conversation(
+    conversation_id: str,
+    user: IdentityDep,
+    store: StoreDep,
+    format: str = "markdown",
+) -> Response:
+    """Audit-friendly transcript export: messages + citations + usage,
+    owner-scoped. Markdown (default) or JSON."""
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.employee_id:
+        raise HTTPException(status_code=403, detail="Not your conversation")
+
+    if format == "json":
+        return Response(
+            content=conversation.model_dump_json(indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{conversation_id}.json"'},
+        )
+    lines = [
+        f"# {conversation.title}",
+        f"_conversation {conversation.conversation_id} · use case "
+        f"{conversation.usecase_id} v{conversation.usecase_version} · {user.name}_",
+        "",
+    ]
+    for m in conversation.messages:
+        lines.append(f"## {m.role.capitalize()}")
+        lines.append(m.content)
+        for c in m.citations:
+            lines.append(
+                f"> [{c.citation_id}] {c.title} — {c.page_section} "
+                f"({c.document_id} v{c.document_version}, {c.source_ref})"
+            )
+        lines.append("")
+    return Response(
+        content="\n".join(lines),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{conversation_id}.md"'},
+    )
 
 
 class UpdateConversationRequest(BaseModel):
