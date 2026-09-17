@@ -8,6 +8,39 @@ A configuration-driven agentic assistant: employees ask questions, get evidence-
 
 **Phase 8 — Quality & Completeness (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
 
+## Problem statement
+
+Enterprise knowledge is fragmented across documents, employee support is slow and inconsistent, and generic chatbots answer without evidence — no citations, weak access control, no audit trail, uncontrolled model cost. (Full business requirements: `RegIntel_AI_Business_Requirements_Document.docx`.)
+
+## Solution overview
+
+A configuration-driven agentic assistant: authenticate an employee, retrieve department-approved knowledge via hybrid search + reranking, answer with full-contract citations, and perform governed actions (tickets, CRM cases) through a LangGraph workflow with validation, duplicate detection, explicit confirmation, idempotency, and audit. Departments and tools are YAML config — no core changes to onboard a new one.
+
+## Architecture
+
+```
+Employee (Angular :4200 · Streamlit :8501 · Genesys agent-assist)
+      │  NDJSON stream: status → tokens → citations → usage
+      ▼
+FastAPI ── identity (stub │ JWT/JWKS) ── audit_log ── use-case config
+      ▼
+LangGraph ── initialize → classify → conditional route
+      │        ├─ knowledge_query → build_filters → retrieve → generate → guardrail
+      │        ├─ ticket_lookup / crm_lookup
+      │        ├─ *_create → clarify → duplicate_check → confirm → write
+      │        └─ direct / confirm / cancel / error_handler
+      ▼
+Tools (server-side allowlist) → hybrid retriever (BM25 + vector → RRF → rerank, ACL-filtered)
+      ▼
+SQLite store · ingestion pipeline · audit · analytics
+```
+
+Deep dive: `docs/architecture.md` · `docs/requirements-traceability.md` · `docs/SUBMISSION.md` (evaluator checklist).
+
+## Technology stack
+
+Python · LangGraph · FastAPI · Pydantic · SQLite (checkpointer + store) · BM25 + hashing-vector hybrid retrieval · Angular 21 + Tailwind · Streamlit · pytest + ruff · Mangum/Bedrock/Entra/Genesys/OpenText adapter boundaries (config-swapped).
+
 ## Setup
 
 ```bash
@@ -36,6 +69,40 @@ cd ui/web && npm install && npx ng serve
 ```
 
 Open http://localhost:4200 — chat with streaming + citations + feedback + language selector + voice input (🎤) and read-aloud (🔊), `/analytics` for the admin dashboard (sign in as e999).
+
+## Environment variables
+
+All optional — defaults run the full demo. Key ones (full list: `.env.example`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REGINTEL_AUTH_MODE` | `stub` | `stub` = demo employee header; `jwt` = real JWT/JWKS validation |
+| `REGINTEL_LLM_PROVIDER` | `local` | `bedrock` swaps generation to the Converse API (self-degrades to local) |
+| `REGINTEL_STORE_BACKEND` / `REGINTEL_CACHE_BACKEND` | `sqlite` / `local` | `dynamodb` / `redis` enterprise boundaries |
+| `REGINTEL_JWT_SECRET` / `REGINTEL_JWT_JWKS_URL` | — | HS256 dev secret / Entra JWKS endpoint |
+| `REGINTEL_DB_PATH` / `REGINTEL_SEED_DIR` / `REGINTEL_KNOWLEDGE_DIR` | `data/…` | storage locations |
+| `REGINTEL_GUARDRAIL_ID` | — | Bedrock ApplyGuardrail merged with local checks |
+
+## Sample inputs & outputs
+
+As `e001` on the IT Support use case:
+
+- `"how do I connect to the VPN"` → grounded answer + citations (KB-IT-001…: doc, section, excerpt, scores, version, source URL)
+- `"what is the cafeteria menu"` → explicit not-found — never invents
+- `"create a ticket my laptop battery drains in an hour"` → confirm prompt → `yes` → `TCK-1xxx created`; repeat → duplicate reused
+- `"check my case CASE-7001"` → CRM case (as `e002` → correctly not found)
+
+Full scripted walkthrough with expected outputs: `docs/demo-script.md`.
+
+## Key design decisions
+
+- **LangGraph over a monolithic prompt** — explicit nodes/edges make routing testable and the node trace demoable.
+- **Tools behind a server-side allowlist** — use-case YAML decides what's enabled; user text can never reach a disabled tool.
+- **One safety contract for all writes** — tickets and CRM cases share validate → dedupe → confirm → idempotent → audit.
+- **Adapter seams everywhere** — identity, LLM, embedder, reranker, store, cache, CRM, speech, ingestion sources all swap by config; local impls keep the demo credential-free.
+- **Deterministic local model by default** — reproducible tests/eval without API keys; Bedrock generates fluent prose when configured.
+
+Rationale + open questions: `docs/decisions-and-open-questions.md`.
 
 ## Test
 

@@ -30,7 +30,9 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [7](phases/phase-7-hardening.md) | Hardening & Handoff ✅ (local slice) | Self-service knowledge upload, P95 latency evidence, CRM/finance eval coverage, OpenAPI export + demo script |
 | [8](phases/phase-8-quality-completeness.md) | Quality & Completeness ✅ (local slice) | Bedrock protocol parity, FR-16 query rewriting, conversation export, rubric scoring, real cost pricing, CI gate |
 
-Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough.
+Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough ·
+[SUBMISSION.md](SUBMISSION.md) — requirement→artifact checklist ·
+[pitch-deck.md](pitch-deck.md) — slide source for `submission/RegIntel-AI-Pitch-Deck.pptx`.
 
 ## Guiding principle
 
