@@ -41,14 +41,25 @@ def _h(auth_headers, employee="e001"):
 # --- offered-action memory (the requirement's example flow) -----------------
 
 
-def test_yes_to_offer_runs_ticket_flow(client, auth_headers):
-    """Knowledge answer offers ticket creation; 'yes' must act on that
-    offer — not be treated as a fresh knowledge query."""
+def test_issue_report_offers_ticket_check(client, auth_headers):
+    """The requirement's example shape: a first-person issue report offers
+    to check existing tickets; 'yes' runs the real lookup."""
     h = _h(auth_headers)
     cid = _conv(client, h)
-    _send(client, h, cid, "my monitor keeps flickering")
+    _, t1 = _send(client, h, cid, "my monitor keeps flickering")
+    assert "existing tickets" in t1
+    _, t2 = _send(client, h, cid, "yes")
+    assert "TCK-1001" in t2
+    assert "knowledge base" not in t2
+
+
+def test_question_offer_yes_runs_create_flow(client, auth_headers):
+    """A how-to question still offers ticket creation; 'yes' enters the
+    create flow with fields mined from the question."""
+    h = _h(auth_headers)
+    cid = _conv(client, h)
+    _send(client, h, cid, "how do I reset my password")
     _, text = _send(client, h, cid, "yes")
-    # Fields mined from the earlier turn -> straight to the confirm gate.
     assert "Confirm" in text
     assert "knowledge base" not in text
 
@@ -61,25 +72,30 @@ def test_no_to_offer_declines_politely(client, auth_headers):
     assert "won't do that" in text or "No problem" in text
 
 
-def test_offer_flow_reaches_confirmation(client, auth_headers):
-    """Full requirement example: issue -> yes -> confirm -> yes -> write."""
+def test_offer_chain_issue_to_created(client, auth_headers):
+    """The full requirement chain: issue -> yes (ticket list) ->
+    yes (confirm gate) -> yes (write)."""
     h = _h(auth_headers)
     cid = _conv(client, h)
-    _send(client, h, cid, "my keyboard keys are sticking")
+    _send(client, h, cid, "my laptop screen flickers badly")
     _, t2 = _send(client, h, cid, "yes")
-    assert "hardware" in t2
+    assert "TCK-100" in t2  # ticket list surfaced
     _, t3 = _send(client, h, cid, "yes")
-    assert "TCK-" in t3
+    assert "Confirm" in t3  # fields mined from the original issue
+    _, t4 = _send(client, h, cid, "yes")
+    assert "TCK-" in t4  # created
 
 
 def test_offer_flow_dedupes_existing_ticket(client, auth_headers):
-    """'I have a VPN issue' + 'yes' must dedupe against the open VPN
-    ticket (TCK-1001) instead of creating a second one."""
+    """'I have a VPN issue' -> yes -> ticket list shows TCK-1001; pushing
+    on to create dedupes against it instead of writing a second ticket."""
     h = _h(auth_headers)
     cid = _conv(client, h)
     _send(client, h, cid, "I have a VPN issue")
-    _, text = _send(client, h, cid, "yes")
-    assert "already have" in text or "TCK-1001" in text
+    _, t2 = _send(client, h, cid, "yes")
+    assert "TCK-1001" in t2
+    _, t3 = _send(client, h, cid, "yes")
+    assert "already have" in t3 or "TCK-1001" in t3
 
 
 def test_new_question_clears_offer(client, auth_headers):

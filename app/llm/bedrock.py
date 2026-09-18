@@ -54,10 +54,10 @@ class BedrockChatModel:
         return self._fallback.respond(template, **kwargs)
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en"
+        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
     ) -> str:
         if not self._client:
-            return self._fallback.generate_grounded(evidence, language=language)
+            return self._fallback.generate_grounded(evidence, language=language, offer=offer)
         import json  # noqa: F401
 
         lang_directive = (
@@ -83,7 +83,10 @@ class BedrockChatModel:
             ],
             inferenceConfig={"maxTokens": 1024, "temperature": 0.0},
         )
-        return resp["output"]["message"]["content"][0]["text"]
+        text = resp["output"]["message"]["content"][0]["text"]
+        from app.llm.base import OFFER_LINES
+
+        return f"{text}\n\n{OFFER_LINES.get(offer, OFFER_LINES['create'])}"
 
     def generate(self, messages: list[dict[str, str]]) -> str:
         if not self._client:

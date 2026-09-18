@@ -22,6 +22,13 @@ def is_cancellation(message: str) -> bool:
     return message.strip().lower().rstrip("!.") in CANCEL_WORDS
 
 
+OFFER_LINES = {
+    "create": "Let me know if you'd like me to create a ticket for anything unresolved.",
+    "lookup": "Would you like me to check your existing tickets for this first?",
+    "create_after_lookup": "Would you like me to create a new ticket? (yes/no)",
+}
+
+
 class ChatModel(Protocol):
     """Model interface behind which real providers (Bedrock Claude, etc.)
     plug in via REGINTEL_LLM_PROVIDER. The local implementation is
@@ -36,7 +43,7 @@ class ChatModel(Protocol):
     def extract_case_fields(self, message: str, fields: dict[str, Any]) -> dict[str, Any]: ...
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en"
+        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
     ) -> str: ...
 
     def respond(self, template_key: str, **kwargs: Any) -> str: ...

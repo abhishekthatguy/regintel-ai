@@ -12,6 +12,7 @@ from app.llm.base import (
     INTENT_KNOWLEDGE,
     INTENT_TICKET_CREATE,
     INTENT_TICKET_LOOKUP,
+    OFFER_LINES,
 )
 
 CATEGORY_KEYWORDS = {
@@ -155,7 +156,7 @@ class LocalChatModel:
     # --- generation -----------------------------------------------------
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en"
+        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
     ) -> str:
         """Extractive grounded answer: every claim comes from a retrieved
         chunk, each tagged with its citation marker (FR-15 contract).
@@ -165,7 +166,7 @@ class LocalChatModel:
         for i, item in enumerate(evidence, start=1):
             chunk = item["chunk"]
             parts.append(f"**{chunk['title']} — {chunk['section']}** [c{i}]\n{chunk['text']}\n")
-        parts.append("Let me know if you'd like me to create a ticket for anything unresolved.")
+        parts.append(OFFER_LINES.get(offer, OFFER_LINES["create"]))
         if language != "en":
             parts.append(
                 f"\n_(requested language: {language} — this deployment's local model "

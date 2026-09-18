@@ -30,6 +30,7 @@ from app.llm.base import (
     INTENT_KNOWLEDGE,
     INTENT_TICKET_CREATE,
     INTENT_TICKET_LOOKUP,
+    OFFER_LINES,
     is_cancellation,
     is_confirmation,
 )
@@ -48,6 +49,12 @@ EMPLOYEE_ID_RE = re.compile(
     r"^\s*(?:my\s+(?:employee|emp)\s+id\s+is\s+)?(?:emp|e)?-?\d{3,6}\s*[.!?]?$",
     re.IGNORECASE,
 )
+
+# First-person problem statement ("I have a VPN issue", "my laptop screen
+# flickers") — the requirement's conversational shape: engage + offer a
+# ticket check rather than only dumping knowledge excerpts. Commands never
+# reach the generate node, so a first-person non-question is an issue report.
+ISSUE_REPORT_RE = re.compile(r"^\s*(?:i|my)\b(?!.*\?)", re.IGNORECASE)
 
 
 class GraphState(TypedDict, total=False):
@@ -278,15 +285,23 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     def ticket_lookup(state: GraphState) -> dict:
         try:
             result = lookup_tool.run(req_ctx(state))
+            offer = OFFER_LINES["create_after_lookup"]
             if not result["found"]:
-                return {"answer": model.respond("ticket_none", scope="")}
+                return {
+                    "answer": f"{model.respond('ticket_none', scope='')} {offer}",
+                    "offered_action": {"action_type": "ticket_create"},
+                }
             lines = ["Here are your tickets:\n"]
             for t in result["tickets"]:
                 lines.append(
                     f"- **{t['ticket_id']}** · {t['category']} · {t['status']} · "
                     f"{t['priority']} — {t['description']}"
                 )
-            return {"answer": model.respond("ticket_list", lines="\n".join(lines))}
+            answer = model.respond("ticket_list", lines="\n".join(lines))
+            return {
+                "answer": f"{answer}\n\n{offer}",
+                "offered_action": {"action_type": "ticket_create"},
+            }
         except Exception as exc:
             return {"error": f"ticket_lookup:{exc}"}
 
@@ -492,11 +507,18 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             return {}  # not_found/tool_disabled etc. already composed upstream
         if state.get("intent") == INTENT_DIRECT:
             return {"answer": model.respond("greeting", name=state["user"]["name"].split()[0])}
+        # First-person issue reports offer a ticket check first (the
+        # requirement's example flow); questions offer ticket creation.
+        check_first = bool(ISSUE_REPORT_RE.match(state["user_message"]))
         return {
             "answer": model.generate_grounded(
-                state.get("evidence", []), language=state.get("language", "en")
+                state.get("evidence", []),
+                language=state.get("language", "en"),
+                offer="lookup" if check_first else "create",
             ),
-            "offered_action": {"action_type": "ticket_create"},
+            "offered_action": {
+                "action_type": "ticket_lookup" if check_first else "ticket_create"
+            },
         }
 
     @node("guardrail")
