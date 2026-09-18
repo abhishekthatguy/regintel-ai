@@ -16,7 +16,7 @@ so no code changes are needed — just config.
 | Health / readiness | `https://regintel-api-xuhl.onrender.com/health` · `/ready` |
 | OpenAPI spec | `https://regintel-api-xuhl.onrender.com/openapi.json` |
 | Blueprint sync | Render dashboard → `regintel-api` service |
-| **UI (Streamlit)** | `https://<app>.streamlit.app` — set after step 2 |
+| **UI (Streamlit)** | **`https://regintel-ai-test.streamlit.app`** — the demo link |
 
 ## 1. Deploy the API on Render (~5 min) — DONE
 
@@ -38,7 +38,7 @@ on every boot; the knowledge corpus auto-ingests on first agent request.
 create→confirm→TCK-1004, admin analytics 200/403 split, Genesys suggest,
 conversation export.
 
-## 2. Deploy the UI on Streamlit Cloud (~3 min)
+## 2. Deploy the UI on Streamlit Cloud (~3 min) — DONE
 
 1. https://share.streamlit.io → sign in with GitHub.
 2. **New app** → repo `abhishekthatguy/regintel-ai`, branch `master`,

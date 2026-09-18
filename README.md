@@ -4,6 +4,18 @@ Enterprise Knowledge & Operations Assistant — IIT Patna GenAI Development Prog
 
 A configuration-driven agentic assistant: employees ask questions, get evidence-grounded answers with citations, look up and create IT tickets — orchestrated by LangGraph. See `docs/` for the full knowledge base and phase plan.
 
+## 🌐 Live demo
+
+| | |
+|---|---|
+| **App (Streamlit)** | https://regintel-ai-test.streamlit.app |
+| API (Render) | https://regintel-api-xuhl.onrender.com |
+| API health | https://regintel-api-xuhl.onrender.com/health |
+
+Sign in by picking a demo employee in the sidebar (`e001` IT · `e002` HR · `e003` Finance · `e999` admin) — no password/token needed in stub mode. Try *"how do I connect to the VPN"* for a cited answer, or the full walkthrough in `docs/demo-script.md`.
+
+> Free tier: the API sleeps after ~15 min idle — if the first message is slow, open the health link once to warm it, then retry.
+
 ## Status
 
 **Phase 8 — Quality & Completeness (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
