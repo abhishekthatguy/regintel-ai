@@ -1,0 +1,14 @@
+# Render Blueprint — deploys the FastAPI backend as a free web service.
+# Dashboard → New → Blueprint → point at this repo. Then set
+# REGINTEL_API_BASE=https://<this service URL> on the Streamlit app.
+services:
+  - type: web
+    name: regintel-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -e .
+    startCommand: bash scripts/start_api.sh
+    healthCheckPath: /health
+    envVars:
+      - key: REGINTEL_AUTH_MODE
+        value: stub
