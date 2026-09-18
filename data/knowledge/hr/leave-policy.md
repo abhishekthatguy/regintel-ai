@@ -9,7 +9,7 @@ source_url: https://kb.internal/hr/leave-policy
 ---
 # Leave Policy
 
-Annual leave: 21 working days per year, accrued monthly. Carryover of up to 5 days into Q1 of the next year.
+Annual leave (vacation / PTO): 21 working days per year, accrued monthly. Carryover of up to 5 days into Q1 of the next year.
 
 ## Requesting leave
 Submit requests in the HRMS at least 3 business days in advance. Leave over 5 consecutive days needs manager + HR approval.

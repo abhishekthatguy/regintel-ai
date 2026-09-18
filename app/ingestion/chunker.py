@@ -2,15 +2,18 @@
 document context (title/section) + metadata to every chunk. Pre-heading
 text becomes the 'Overview' section."""
 
+import re
+
 from app.ingestion.base import RawDocument
 from app.retrieval.corpus import HEADING, Chunk
 
 MIN_CHUNK_CHARS = 20
+DOC_TITLE = re.compile(r"^\s*#\s+[^\n]*")
 
 
 def chunk_document(doc: RawDocument) -> list[Chunk]:
     parts = HEADING.split(doc.body)
-    sections = [("Overview", parts[0])]
+    sections = [("Overview", DOC_TITLE.sub("", parts[0]))]
     sections += [(parts[i].strip(), parts[i + 1]) for i in range(1, len(parts) - 1, 2)]
 
     chunks: list[Chunk] = []
