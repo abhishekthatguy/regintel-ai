@@ -131,8 +131,12 @@ class SQLiteStore:
         self._db_path = str(db_path)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+        # 30s busy timeout + WAL: concurrent streams serialize writes instead
+        # of crashing with "database is locked" (seen in scripts/load_test.py).
+        conn = sqlite3.connect(self._db_path, timeout=30)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 30000")
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 

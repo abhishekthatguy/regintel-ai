@@ -540,6 +540,16 @@ class LangGraphRunner:
     The AsyncSqliteSaver checkpointer is created lazily on first run so the
     runner can be built in sync dependency-injection code."""
 
+    class _ConnHandle:
+        """Stand-in for the from_conn_string async-context handle that
+        teardown code closes via __aexit__."""
+
+        def __init__(self, conn):
+            self._conn = conn
+
+        async def __aexit__(self, *_):
+            await self._conn.close()
+
     def __init__(self, ctx_factory, model, checkpoint_db_path: str):
         self._ctx_factory = ctx_factory  # (usecase) -> ToolContext
         self._model = model
@@ -550,8 +560,15 @@ class LangGraphRunner:
 
     async def _graph_for(self, usecase: UseCaseConfig):
         if self._saver is None:
-            self._saver_ctx = AsyncSqliteSaver.from_conn_string(self._db_path)
-            self._saver = await self._saver_ctx.__aenter__()
+            import aiosqlite
+
+            # Concurrent streams share one SQLite file — a 30s busy timeout
+            # turns write-lock contention into a wait instead of a 500.
+            conn = await aiosqlite.connect(self._db_path, timeout=30)
+            await conn.execute("PRAGMA busy_timeout = 30000")
+            await conn.execute("PRAGMA journal_mode = WAL")
+            self._saver_ctx = self._ConnHandle(conn)
+            self._saver = AsyncSqliteSaver(conn)
         if usecase.usecase_id not in self._graphs:
             self._graphs[usecase.usecase_id] = build_graph(
                 self._ctx_factory(usecase), self._model, self._saver

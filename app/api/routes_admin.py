@@ -36,15 +36,16 @@ def _adapter_for(source: str, settings: Settings):
 
 @router.post("/ingestions", status_code=201)
 def start_ingestion(
-    req: IngestRequest,
     _admin: Annotated[UserContext, Depends(require_admin)],
     store: Annotated[SQLiteStore, Depends(get_store)],
     settings: Annotated[Settings, Depends(get_settings)],
+    req: IngestRequest | None = None,
 ) -> dict:
     """FR-10 admin trigger: run an ingestion job for a source adapter.
     Synchronous in the local demo (jobs are seconds); a cloud deploy would
     hand this to a worker."""
-    adapter = _adapter_for(req.source, settings)
+    source = req.source if req else "local_files"
+    adapter = _adapter_for(source, settings)
     pipeline = IngestionPipeline(store, get_embedder())
     try:
         result = pipeline.run(adapter)
@@ -57,7 +58,7 @@ def start_ingestion(
         actor=_admin.employee_id,
         action="ingestion_run",
         outcome=result["job_id"],
-        detail={"source": req.source, "ingested": result["ingested"], "failed": result["failed"]},
+        detail={"source": source, "ingested": result["ingested"], "failed": result["failed"]},
     )
     return result
 

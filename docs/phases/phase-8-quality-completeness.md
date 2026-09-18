@@ -67,6 +67,10 @@ to lint + the full pytest suite (which includes the 31-case golden eval).
 - `ruff`: clean · `ng build`: clean
 - Live: export returns markdown transcript with citations; e002 → 403
 - Eval summary includes rubric means
+- **Submission dry-run found & fixed a real bug**: concurrent streams crashed
+  with `sqlite3.OperationalError: database is locked` (15/20 completed, p95
+  15.7s). Store + checkpointer connections now use WAL + 30s busy timeout —
+  load test is 20/20 with p95 ≈ 110ms.
 
 ## Remaining honest gaps
 

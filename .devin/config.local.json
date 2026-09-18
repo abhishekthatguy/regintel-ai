@@ -6,7 +6,10 @@
       "Exec(.venv/bin/uvicorn)",
       "Exec(sleep)",
       "Exec(.venv/bin/streamlit run)",
-      "Exec(.venv/bin/ruff format)"
+      "Exec(.venv/bin/ruff format)",
+      "Exec(REGINTEL_DB_PATH=/tmp/fresh_regintel.db .venv/bin/python)",
+      "Exec(xargs kill)",
+      "Exec(head)"
     ]
   }
 }
