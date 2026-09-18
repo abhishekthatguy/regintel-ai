@@ -2,6 +2,8 @@ import re
 from typing import Any
 
 from app.llm.base import (
+    CANCEL_WORDS,
+    CONFIRM_WORDS,
     INTENT_CANCEL,
     INTENT_CONFIRM,
     INTENT_CRM_CASE_CREATE,
@@ -11,9 +13,6 @@ from app.llm.base import (
     INTENT_TICKET_CREATE,
     INTENT_TICKET_LOOKUP,
 )
-
-CONFIRM_WORDS = {"yes", "y", "confirm", "confirmed", "proceed", "ok", "okay", "sure", "go ahead"}
-CANCEL_WORDS = {"no", "n", "cancel", "stop", "nevermind", "never mind", "abort", "don't"}
 
 CATEGORY_KEYWORDS = {
     "vpn": {"vpn", "securelink", "remote access"},
@@ -202,6 +201,7 @@ TEMPLATES = {
         "The support team will pick it up. Anything else?"
     ),
     "cancelled": "Okay, I've cancelled that. No ticket was created.",
+    "offer_declined": "No problem — I won't do that. Anything else I can help with?",
     "duplicate": (
         "You already have an open {category} ticket: **{ticket_id}** "
         "({status}, {priority} priority) — “{description}”. "

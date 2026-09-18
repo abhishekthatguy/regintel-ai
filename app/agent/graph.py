@@ -29,6 +29,8 @@ from app.llm.base import (
     INTENT_KNOWLEDGE,
     INTENT_TICKET_CREATE,
     INTENT_TICKET_LOOKUP,
+    is_cancellation,
+    is_confirmation,
 )
 from app.schemas.config import UseCaseConfig
 from app.schemas.conversation import Citation
@@ -50,6 +52,7 @@ class GraphState(TypedDict, total=False):
     duplicate: bool
     filters: dict[str, Any]
     pending_action: dict[str, Any] | None
+    offered_action: dict[str, Any] | None
     evidence: list[dict[str, Any]]
     citations: list[dict[str, Any]]
     language: str
@@ -107,10 +110,45 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         INTENT_CRM_CASE_CREATE: "crm_case_create",
     }
 
+    def _mine_missing_fields(fields: dict, history: list, extractor, validator) -> dict:
+        """Multi-turn memory: fill still-missing fields from earlier user
+        turns — information already given in the conversation counts.
+        Only knowledge-classified turns are mined (user statements/questions),
+        never commands, confirms, or cancels."""
+        recent = [m["content"].strip() for m in history if m.get("role") == "user"]
+        for text in reversed(recent[-6:]):
+            _, missing = validator(fields)
+            if not missing:
+                break
+            if len(text) < 10 or is_confirmation(text) or is_cancellation(text):
+                continue
+            if model.classify(text, {"pending_action": None, "history": []}) != INTENT_KNOWLEDGE:
+                continue
+            candidate = extractor(text, {})
+            for key in missing:
+                if key in candidate:
+                    fields[key] = candidate[key]
+        return fields
+
     @node("classify")
     def classify(state: GraphState) -> dict:
         context = {"pending_action": state.get("pending_action"), "history": state.get("history", [])}
-        intent = model.classify(state["user_message"], context)
+        message = state["user_message"]
+        intent = model.classify(message, context)
+
+        # Offered-action memory: a knowledge answer that ended with
+        # "let me know if you'd like me to create a ticket" sets
+        # offered_action; a bare "yes"/"no" reply acts on that offer.
+        offered = state.get("offered_action")
+        if offered and intent not in (INTENT_CONFIRM, INTENT_CANCEL):
+            if is_confirmation(message):
+                intent = offered.get("action_type") or INTENT_TICKET_CREATE
+            elif is_cancellation(message):
+                return {
+                    "intent": INTENT_DIRECT,
+                    "answer": model.respond("offer_declined"),
+                    "offered_action": None,
+                }
 
         # Tool allowlist is enforced server-side from use-case config —
         # a disabled tool can never execute regardless of the request.
@@ -120,15 +158,19 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
             return {
                 "intent": INTENT_DIRECT,
                 "answer": model.respond("tool_disabled", available=available),
+                "offered_action": None,
             }
 
-        update: dict = {"intent": intent}
+        update: dict = {"intent": intent, "offered_action": None}
 
         if intent == INTENT_CANCEL and state.get("pending_action"):
             update["pending_action"] = None
             update["answer"] = model.respond("cancelled")
         elif intent == INTENT_TICKET_CREATE:
-            fields = model.extract_fields(state["user_message"], state.get("fields", {}))
+            fields = model.extract_fields(message, state.get("fields", {}))
+            fields = _mine_missing_fields(
+                fields, state.get("history", []), model.extract_fields, validate_fields
+            )
             clean, missing = validate_fields(fields)
             update["fields"] = clean
             update["missing"] = missing
@@ -139,7 +181,10 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                 "awaiting_confirmation": False,
             }
         elif intent == INTENT_CRM_CASE_CREATE:
-            fields = model.extract_case_fields(state["user_message"], state.get("fields", {}))
+            fields = model.extract_case_fields(message, state.get("fields", {}))
+            fields = _mine_missing_fields(
+                fields, state.get("history", []), model.extract_case_fields, validate_case_fields
+            )
             clean, missing = validate_case_fields(fields)
             update["fields"] = clean
             update["missing"] = missing
@@ -188,6 +233,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                     "answer": model.respond("not_found"),
                     "evidence": [],
                     "citations": [],
+                    "offered_action": {"action_type": "ticket_create"},
                 }
             return {
                 "evidence": result["evidence"],
@@ -418,7 +464,8 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         return {
             "answer": model.generate_grounded(
                 state.get("evidence", []), language=state.get("language", "en")
-            )
+            ),
+            "offered_action": {"action_type": "ticket_create"},
         }
 
     @node("guardrail")

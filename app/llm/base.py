@@ -10,6 +10,17 @@ INTENT_DIRECT = "direct"
 INTENT_CONFIRM = "confirm"
 INTENT_CANCEL = "cancel"
 
+CONFIRM_WORDS = {"yes", "y", "confirm", "confirmed", "proceed", "ok", "okay", "sure", "go ahead"}
+CANCEL_WORDS = {"no", "n", "cancel", "stop", "nevermind", "never mind", "abort", "don't"}
+
+
+def is_confirmation(message: str) -> bool:
+    return message.strip().lower().rstrip("!.") in CONFIRM_WORDS
+
+
+def is_cancellation(message: str) -> bool:
+    return message.strip().lower().rstrip("!.") in CANCEL_WORDS
+
 
 class ChatModel(Protocol):
     """Model interface behind which real providers (Bedrock Claude, etc.)
