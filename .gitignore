@@ -12,3 +12,4 @@ build/
 *.egg-info/
 data/*.db-shm
 data/*.db-wal
+.devin/config.local.json
