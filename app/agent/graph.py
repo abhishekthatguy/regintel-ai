@@ -13,6 +13,7 @@ keyed on thread_id = conversation_id.
 
 import dataclasses
 import logging
+import re
 import time
 from typing import Any, TypedDict
 
@@ -39,6 +40,14 @@ from app.tools.knowledge import KnowledgeSearchTool
 from app.tools.tickets import TicketCreateTool, TicketLookupTool, validate_fields
 
 logger = logging.getLogger(__name__)
+
+# A message that is just an employee ID (e.g. "EMP1024", "e001",
+# "my employee id is 1024") — acknowledged against the signed-in
+# identity, never used to switch it.
+EMPLOYEE_ID_RE = re.compile(
+    r"^\s*(?:my\s+(?:employee|emp)\s+id\s+is\s+)?(?:emp|e)?-?\d{3,6}\s*[.!?]?$",
+    re.IGNORECASE,
+)
 
 
 class GraphState(TypedDict, total=False):
@@ -134,6 +143,28 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
     def classify(state: GraphState) -> dict:
         context = {"pending_action": state.get("pending_action"), "history": state.get("history", [])}
         message = state["user_message"]
+
+        # A bare employee ID: acknowledge the signed-in profile and offer
+        # a ticket check (the requirement's example exchange). A typed ID
+        # can never switch identity — auth stays server-side.
+        if EMPLOYEE_ID_RE.match(message) and not state.get("pending_action"):
+            user = state["user"]
+            typed = re.sub(
+                r"^(?:my\s+(?:employee|emp)\s+id\s+is\s+)", "",
+                message.strip(), flags=re.IGNORECASE,
+            )
+            template = "profile" if typed.lower() == user["employee_id"].lower() else "profile_mismatch"
+            return {
+                "intent": INTENT_DIRECT,
+                "answer": model.respond(
+                    template,
+                    name=user["name"],
+                    employee_id=user["employee_id"],
+                    department=user["department"],
+                ),
+                "offered_action": {"action_type": "ticket_lookup"},
+            }
+
         intent = model.classify(message, context)
 
         # Offered-action memory: a knowledge answer that ended with

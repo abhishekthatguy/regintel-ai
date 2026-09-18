@@ -154,3 +154,43 @@ def test_gibberish_stays_honest(client, auth_headers):
     cid = _conv(client, h)
     _, text = _send(client, h, cid, "asdf qwerty zxcv")
     assert "won't guess" in text or "couldn't find" in text
+
+
+# --- the requirement's literal example exchange ------------------------------
+
+
+def test_employee_id_acknowledged_not_retrieved(client, auth_headers):
+    """'EMP1024' must get a profile response, not a knowledge lookup."""
+    h = _h(auth_headers)
+    cid = _conv(client, h)
+    _, text = _send(client, h, cid, "EMP1024")
+    assert "signed in" in text or "profile" in text.lower()
+    assert "knowledge base" not in text
+
+
+def test_typed_id_cannot_switch_identity(client, auth_headers):
+    """Typing another employee's ID must not switch the session identity —
+    it surfaces the real signed-in profile instead."""
+    h = _h(auth_headers)  # signed in as e001
+    cid = _conv(client, h)
+    _, text = _send(client, h, cid, "EMP1024")
+    assert "e001" in text  # real identity is surfaced
+    _, text = _send(client, h, cid, "show my tickets")
+    assert "TCK-1001" in text  # still e001's tickets, not EMP1024's
+
+
+def test_matching_id_confirms_profile(client, auth_headers):
+    h = _h(auth_headers)
+    cid = _conv(client, h)
+    _, text = _send(client, h, cid, "my employee id is e001")
+    assert "found your profile" in text.lower() or "signed in" in text
+
+
+def test_profile_offer_yes_checks_tickets(client, auth_headers):
+    """The full example: ID -> profile + offer -> 'yes' -> ticket list."""
+    h = _h(auth_headers)
+    cid = _conv(client, h)
+    _, t1 = _send(client, h, cid, "EMP1024")
+    assert "existing tickets" in t1
+    _, t2 = _send(client, h, cid, "yes")
+    assert "TCK-1001" in t2

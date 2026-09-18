@@ -202,6 +202,16 @@ TEMPLATES = {
     ),
     "cancelled": "Okay, I've cancelled that. No ticket was created.",
     "offer_declined": "No problem — I won't do that. Anything else I can help with?",
+    "profile": (
+        "I found your profile — you're signed in as **{name}** "
+        "({employee_id}, {department}). Would you like me to check your "
+        "existing tickets?"
+    ),
+    "profile_mismatch": (
+        "That ID doesn't match this session — you're signed in as **{name}** "
+        "({employee_id}, {department}), and I can't switch identities here. "
+        "Would you like me to check your existing tickets?"
+    ),
     "duplicate": (
         "You already have an open {category} ticket: **{ticket_id}** "
         "({status}, {priority} priority) — “{description}”. "
