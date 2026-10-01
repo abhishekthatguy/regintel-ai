@@ -25,6 +25,12 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "ruff==0.16.7",
+    "fakeredis==2.32.1",
+    "moto[dynamodb]==5.1.18",
+]
+cloud = [
+    "redis==5.3.1",
+    "boto3==1.42.47",
 ]
 
 [tool.setuptools.packages.find]

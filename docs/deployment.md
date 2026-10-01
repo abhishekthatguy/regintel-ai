@@ -73,10 +73,9 @@ against the live API.
   seed script re-runs on start, so demo data always comes back. Don't
   treat created tickets/cases as permanent.
 - **Stub auth is the "login"**: the employee dropdown (e001–e003, e999)
-  is the demo identity — no password, no bearer token needed. To demo
-  real JWT: set `REGINTEL_AUTH_MODE=jwt` + `REGINTEL_JWT_SECRET` on
-  Render, mint a token with `scripts/mint_dev_token.py --sub e999`,
-  paste it in the sidebar token field.
+  is the demo identity — no password, no bearer token needed. Real JWT
+  mode is documented below — it stays **off** on the demo instance so
+  evaluators can click through without a token.
 - **Free-tier redeploys**: push to `master` on GitHub → Render
   auto-deploys the new commit (or use the deploy hook). Streamlit Cloud
   picks up pushes automatically too.
@@ -84,6 +83,55 @@ against the live API.
   To deploy it later: build `dist/` against the API URL and host as a
   Render static site; set `REGINTEL_ALLOWED_ORIGINS` on the API to the
   static site domain (browser CORS).
+
+## 4. JWT auth mode (production path)
+
+The demo instance runs `REGINTEL_AUTH_MODE=stub` so evaluators need no
+credentials. The deployed API supports real JWT auth — verified: 401 on
+missing/forged tokens, 200 with a valid token, `/health` stays public.
+
+To switch Render to JWT mode:
+
+1. Render → `regintel-api` → **Environment** → add:
+   ```
+   REGINTEL_AUTH_MODE=jwt
+   REGINTEL_JWT_SECRET=<random 64-char secret>
+   ```
+   (optional: `REGINTEL_JWT_ISSUER` / `REGINTEL_JWT_AUDIENCE` /
+   `REGINTEL_JWT_JWKS_URL` for an external IdP such as Entra ID — JWKS
+   mode needs no shared secret)
+2. Save → Render redeploys.
+3. **Evaluator token flow** — mint a long-lived demo token locally:
+   ```bash
+   REGINTEL_JWT_SECRET=<same-secret> .venv/bin/python scripts/mint_dev_token.py \
+       --sub e001 --name "Asha Verma" --department IT --roles employee --ttl 86400
+   ```
+4. In the Streamlit sidebar, paste the token into **Bearer token** —
+   every request then carries `Authorization: Bearer <token>`; the
+   employee dropdown no longer controls identity (`sub` is authoritative).
+   For an unattended demo, set it as a Streamlit secret the app reads.
+5. Flip back to `stub` for friction-free evaluation.
+
+Trade-off: JWT mode blocks click-through demos (every user needs a
+token), so the submitted instance intentionally stays on `stub` while
+the JWT path remains one env-var flip away.
+
+## 5. Cloud backends (production path)
+
+Local defaults are SQLite + in-process TTL cache. The production
+adapters are real and config-selected:
+
+| Setting | Value | Effect |
+|---|---|---|
+| `REGINTEL_STORE_BACKEND` | `dynamodb` | `DynamoDBStore` (boto3) replaces `SQLiteStore` — conversations/tickets/KB/app tables, auto-created by `init_schema`. Needs `AWS_REGION` + AWS credentials (`AWS_PROFILE` locally, IAM role on the host in prod). |
+| `REGINTEL_CACHE_BACKEND` | `redis` | `RedisCache` (redis-py) replaces `LocalTTLCache` for retrieval responses. Needs `REGINTEL_REDIS_URL` (ElastiCache / Upstash / Render Key Value). Connection failure degrades to local TTL — never breaks requests. |
+| `REGINTEL_LLM_PROVIDER` | `hf` / `bedrock` | HF Inference Providers (`REGINTEL_HF_TOKEN`) or Bedrock Converse (`AWS_REGION`); falls back to the deterministic local model when unconfigured. |
+| `REGINTEL_EMBEDDER` | `hf` | Semantic embeddings via `sentence-transformers/all-MiniLM-L6-v2` (384-dim). |
+
+All backends are exercised in CI without real services: `fakeredis` for
+the cache, `moto` for DynamoDB, mocked-HTTP for HF. On Render's free tier
+the SQLite fallback is deliberate — free Postgres/Redis exist but the
+ephemeral filesystem note above explains the demo data model.
 
 ## What the evaluator sees
 

@@ -65,6 +65,7 @@ def client(tmp_path, monkeypatch):
     deps.RUNNERS.clear()
     deps._runner_for.cache_clear()  # type: ignore[attr-defined]
     deps._store_for.cache_clear()  # type: ignore[attr-defined]
+    deps._cache_for.cache_clear()  # type: ignore[attr-defined]
     get_settings.cache_clear()
 
 

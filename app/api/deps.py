@@ -7,6 +7,7 @@ from fastapi import Depends, Header, Request
 
 from app.agent.graph import LangGraphRunner
 from app.agent.runner import AgentRunner
+from app.cache import Cache, get_cache
 from app.config.loader import UseCaseLoader
 from app.identity.stub import StubIdentityProvider
 from app.ingestion.local_files import LocalFileAdapter
@@ -23,6 +24,13 @@ DEMO_EMPLOYEE_HEADER = "X-Demo-Employee"
 
 
 @lru_cache
+def _cache_for(backend: str = "local", redis_url: str = "") -> Cache:
+    """Shared retrieval cache — REGINTEL_CACHE_BACKEND=redis selects the
+    real Redis backend (REGINTEL_REDIS_URL); anything else is local TTL."""
+    return get_cache(backend, redis_url)
+
+
+@lru_cache
 def _store_for(db_path: str, backend: str = "sqlite"):
     """Store selected by REGINTEL_STORE_BACKEND. 'dynamodb' instantiates the
     enterprise boundary — it fails closed until AWS config is provided."""
@@ -30,7 +38,9 @@ def _store_for(db_path: str, backend: str = "sqlite"):
         from app.stores.dynamodb import DynamoDBStore
 
         store = DynamoDBStore(
-            table_prefix="regintel", region=os.getenv("AWS_REGION", "")
+            table_prefix=os.getenv("REGINTEL_DYNAMO_PREFIX", "regintel"),
+            region=os.getenv("AWS_REGION", ""),
+            endpoint_url=os.getenv("REGINTEL_DYNAMO_ENDPOINT") or None,
         )
     else:
         store = SQLiteStore(db_path)
@@ -56,6 +66,8 @@ def _runner_for(db_path: str, knowledge_dir: str, seed_dir: str) -> LangGraphRun
     store = _store_for(db_path)
     ensure_ingested(store, Path(knowledge_dir))
     crm = LocalCRMAdapter(Path(seed_dir) / "crm_cases.json")
+    settings = get_settings()
+    cache = _cache_for(settings.cache_backend, settings.redis_url)
 
     def ctx_factory(usecase) -> ToolContext:
         return ToolContext(
@@ -65,6 +77,8 @@ def _runner_for(db_path: str, knowledge_dir: str, seed_dir: str) -> LangGraphRun
             embedder=get_embedder(usecase.models.embedding),
             reranker=get_reranker(usecase.models.rerank),
             crm=crm,
+            cache=cache,
+            cache_ttl=settings.cache_ttl_seconds,
         )
 
     runner = LangGraphRunner(ctx_factory, get_chat_model(), db_path)

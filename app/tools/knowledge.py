@@ -1,3 +1,5 @@
+import hashlib
+
 from app.retrieval.hybrid import HybridRetriever
 from app.schemas.conversation import Citation
 from app.tools.base import ToolContext
@@ -14,16 +16,41 @@ class KnowledgeSearchTool:
 
     def run(self, ctx: ToolContext, query: str) -> dict:
         # Retriever built per call: BM25/vector legs stay fresh after
-        # re-ingestion without any cache invalidation (small local corpus).
+        # re-ingestion; the response cache is invalidated on ingest.
+        allowed = {ctx.usecase.filters.department} if ctx.usecase.filters.department else None
+        cache_key = None
+        if getattr(ctx, "cache", None):
+            # FR-21: cache the retrieval result — keyed by usecase +
+            # department + query so responses never cross tenants.
+            dept = ctx.usecase.filters.department or "all"
+            qhash = hashlib.sha256(query.strip().lower().encode()).hexdigest()[:16]
+            cache_key = f"kb:{ctx.usecase.usecase_id}:{dept}:{qhash}"
+            hit = ctx.cache.get(cache_key)
+            if hit is not None:
+                return {
+                    "found": hit["found"],
+                    "evidence": hit["evidence"],
+                    "citations": [Citation.model_validate(c) for c in hit["citations"]],
+                }
         retriever = HybridRetriever(
             ctx.store.all_chunks(), ctx.store.chunk_vectors(), ctx.embedder, ctx.reranker
         )
-        allowed = {ctx.usecase.filters.department} if ctx.usecase.filters.department else None
         evidence = retriever.retrieve(query, allowed_departments=allowed, top_k=self._top_k)
+        citations = [self._to_citation(i + 1, item) for i, item in enumerate(evidence)]
+        if cache_key:
+            ctx.cache.set(
+                cache_key,
+                {
+                    "found": bool(evidence),
+                    "evidence": evidence,
+                    "citations": [c.model_dump(mode="json") for c in citations],
+                },
+                ttl=ctx.cache_ttl,
+            )
         return {
             "found": bool(evidence),
             "evidence": evidence,
-            "citations": [self._to_citation(i + 1, item) for i, item in enumerate(evidence)],
+            "citations": citations,
         }
 
     @staticmethod

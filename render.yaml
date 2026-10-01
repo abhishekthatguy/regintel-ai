@@ -6,7 +6,7 @@ services:
     name: regintel-api
     runtime: python
     plan: free
-    buildCommand: pip install -e .
+    buildCommand: pip install -e ".[cloud]"
     startCommand: bash scripts/start_api.sh
     healthCheckPath: /health
     envVars:

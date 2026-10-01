@@ -51,6 +51,9 @@ def start_ingestion(
         result = pipeline.run(adapter)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Source adapter failed: {exc}") from exc
+    from app.api.deps import _cache_for
+
+    _cache_for(settings.cache_backend, settings.redis_url).invalidate("kb:")
     from app.audit import record_audit
 
     record_audit(
@@ -125,6 +128,9 @@ def upload_knowledge(
 
     pipeline = IngestionPipeline(store, get_embedder())
     result = pipeline.run(LocalFileAdapter(settings.knowledge_dir))
+    from app.api.deps import _cache_for
+
+    _cache_for(settings.cache_backend, settings.redis_url).invalidate("kb:")
     from app.audit import record_audit
 
     record_audit(

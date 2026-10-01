@@ -18,3 +18,5 @@ class ToolContext:
     embedder: Any  # Embedder (app.retrieval.embeddings)
     reranker: Any  # Reranker (app.retrieval.rerank)
     crm: Any  # CRMAdapter (app.crm.base)
+    cache: Any = None  # Cache (app.cache) — retrieval response cache
+    cache_ttl: int = 300

@@ -29,6 +29,7 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [6](phases/phase-6-pilot-readiness.md) | Pilot Readiness ✅ (local slice) | CRM writes w/ full safety contract, dept cost attribution + funnel + unmet-need clustering, dept-owner self-service views |
 | [7](phases/phase-7-hardening.md) | Hardening & Handoff ✅ (local slice) | Self-service knowledge upload, P95 latency evidence, CRM/finance eval coverage, OpenAPI export + demo script |
 | [8](phases/phase-8-quality-completeness.md) | Quality & Completeness ✅ (local slice) | Bedrock protocol parity, FR-16 query rewriting, conversation export, rubric scoring, real cost pricing, CI gate |
+| [9](phases/phase-9-production-readiness.md) | Production Readiness ✅ | HF LLM + semantic embeddings, real Redis cache, real DynamoDB store (moto-tested), JWT on Render, HF MCP |
 
 Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough ·
 [SUBMISSION.md](SUBMISSION.md) — requirement→artifact checklist ·
