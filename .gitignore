@@ -13,3 +13,8 @@ build/
 data/*.db-shm
 data/*.db-wal
 .devin/config.local.json
+
+# local backups / scratch / editor
+*.db.bak
+*.code-workspace
+rough.md
