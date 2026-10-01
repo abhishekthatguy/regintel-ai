@@ -54,10 +54,16 @@ class BedrockChatModel:
         return self._fallback.respond(template, **kwargs)
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
+        self,
+        evidence: list[dict[str, Any]],
+        language: str = "en",
+        offer: str = "create",
+        question: str = "",
     ) -> str:
         if not self._client:
-            return self._fallback.generate_grounded(evidence, language=language, offer=offer)
+            return self._fallback.generate_grounded(
+                evidence, language=language, offer=offer, question=question
+            )
         import json  # noqa: F401
 
         lang_directive = (
@@ -75,8 +81,9 @@ class BedrockChatModel:
                     "role": "user",
                     "content": [
                         {
-                            "text": f"{lang_directive}Answer using ONLY this "
-                            f"evidence; tag each claim with its [cN] marker.\n\n{context}"
+                            "text": f"{lang_directive}Answer the question "
+                            f"using ONLY this evidence; tag each claim with "
+                            f"its [cN] marker.\n\nQuestion: {question}\n\n{context}"
                         }
                     ],
                 }

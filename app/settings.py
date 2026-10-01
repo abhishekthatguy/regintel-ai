@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     guardrail_id: str = ""  # Bedrock guardrail id/version, e.g. "abc123:1"
 
+    # --- Model provider selection ---
+    # llm_provider: "local" | "bedrock" | "hf". embedder: "" (usecase yaml)
+    #   | "hf" | "hf:<model>" | "amazon.titan-embed-text-v2:0".
+    llm_provider: str = "local"
+    embedder: str = ""
+    hf_token: str = ""  # HF access token — never commit a real value
+    hf_model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    hf_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+
     # Browser clients allowed to call the API (Angular dev server, etc.).
     allowed_origins: list[str] = [
         "http://localhost:4200",

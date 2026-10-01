@@ -515,6 +515,7 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                 state.get("evidence", []),
                 language=state.get("language", "en"),
                 offer="lookup" if check_first else "create",
+                question=state["user_message"],
             ),
             "offered_action": {
                 "action_type": "ticket_lookup" if check_first else "ticket_create"

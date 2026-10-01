@@ -74,7 +74,66 @@ class BedrockEmbedder:
         return json.loads(resp["body"].read())["embedding"]
 
 
+class HFEmbedder:
+    """Real semantic embeddings via the Hugging Face Inference API
+    (feature-extraction pipeline) — sentence-transformers family. Selected
+    by REGINTEL_EMBEDDER=hf or models.embedding: "hf:<model>". Requires
+    REGINTEL_HF_TOKEN; degrades to HashingEmbedder when absent so the
+    offline demo keeps working."""
+
+    HF_INFERENCE_URL = (
+        "https://router.huggingface.co/hf-inference/pipeline/feature-extraction/"
+    )
+    DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384 dims
+
+    def __init__(self, model_id: str = DEFAULT_MODEL, token: str | None = None):
+        from app.settings import get_settings
+
+        self.model_id = model_id
+        self.dimensions = 384  # all-MiniLM-L6-v2 output size
+        self._token = token if token is not None else get_settings().hf_token
+        self._fallback = HashingEmbedder(self.dimensions)
+        self._client = None
+        if self._token:
+            import httpx
+
+            self._client = httpx.Client(
+                headers={"Authorization": f"Bearer {self._token}"}, timeout=30.0
+            )
+
+    @property
+    def available(self) -> bool:
+        return self._client is not None
+
+    def embed(self, text: str) -> list[float]:
+        if not self._client:
+            return self._fallback.embed(text)
+        try:
+            resp = self._client.post(
+                self.HF_INFERENCE_URL + self.model_id, json={"inputs": text}
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # Unwrap the batch axis for a single input: [[vec]] -> [vec],
+            # then mean-pool if the API returned token-level embeddings.
+            while isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+                data = data[0]
+            if isinstance(data, list) and data and isinstance(data[0], list):
+                data = [sum(col) / len(data) for col in zip(*data, strict=True)]
+            return [float(v) for v in data]
+        except Exception:
+            return self._fallback.embed(text)
+
+
 def get_embedder(configured: str = "local") -> Embedder:
+    from app.settings import get_settings
+
+    configured = get_settings().embedder or configured
+    if configured.startswith("hf"):
+        model = configured.split(":", 1)[1] if ":" in configured else HFEmbedder.DEFAULT_MODEL
+        return HFEmbedder(model_id=model)
+    if configured.startswith("sentence-transformers/"):
+        return HFEmbedder(model_id=configured)
     if configured.startswith(("amazon.titan", "cohere.")):
         return BedrockEmbedder(model_id=configured)
     return HashingEmbedder()

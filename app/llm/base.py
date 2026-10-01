@@ -43,7 +43,11 @@ class ChatModel(Protocol):
     def extract_case_fields(self, message: str, fields: dict[str, Any]) -> dict[str, Any]: ...
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
+        self,
+        evidence: list[dict[str, Any]],
+        language: str = "en",
+        offer: str = "create",
+        question: str = "",
     ) -> str: ...
 
     def respond(self, template_key: str, **kwargs: Any) -> str: ...

@@ -89,7 +89,9 @@ All optional — defaults run the full demo. Key ones (full list: `.env.example`
 | Variable | Default | Purpose |
 |---|---|---|
 | `REGINTEL_AUTH_MODE` | `stub` | `stub` = demo employee header; `jwt` = real JWT/JWKS validation |
-| `REGINTEL_LLM_PROVIDER` | `local` | `bedrock` swaps generation to the Converse API (self-degrades to local) |
+| `REGINTEL_LLM_PROVIDER` | `local` | `hf` = Hugging Face Inference Providers (Llama-3.1-8B); `bedrock` = Converse API. Both self-degrade to local without credentials |
+| `REGINTEL_HF_TOKEN` / `REGINTEL_HF_MODEL` | — / `Llama-3.1-8B` | HF access token + instruct model for the `hf` provider |
+| `REGINTEL_EMBEDDER` | `local` (hashing) | `hf` = real semantic embeddings via `all-MiniLM-L6-v2` (HF Inference API) |
 | `REGINTEL_STORE_BACKEND` / `REGINTEL_CACHE_BACKEND` | `sqlite` / `local` | `dynamodb` / `redis` enterprise boundaries |
 | `REGINTEL_JWT_SECRET` / `REGINTEL_JWT_JWKS_URL` | — | HS256 dev secret / Entra JWKS endpoint |
 | `REGINTEL_DB_PATH` / `REGINTEL_SEED_DIR` / `REGINTEL_KNOWLEDGE_DIR` | `data/…` | storage locations |
@@ -184,7 +186,7 @@ Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e
 
 ## Notes / limitations (Phase 8)
 
-- LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Bedrock Claude plugs in via `REGINTEL_LLM_PROVIDER=bedrock` (Converse API; self-degrades to local without credentials).
+- LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Real providers plug in via `REGINTEL_LLM_PROVIDER=hf` (Hugging Face Inference Providers, needs `REGINTEL_HF_TOKEN`) or `bedrock` (Converse API); both self-degrade to local without credentials.
 - Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config.
 - Ingestion pipeline (`app/ingestion/`): `SourceAdapter` interface with local-files adapter live and OpenText/Graph skeletons that fail closed; checksum drift detection re-indexes changed docs; per-doc failures land in the `ingestion_failures` dead-letter table.
 - Citations carry the full §10.1 contract: document, section, chunk, excerpt, retrieval + rerank scores, version, source URL/ref, access decision.

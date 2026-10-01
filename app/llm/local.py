@@ -156,7 +156,11 @@ class LocalChatModel:
     # --- generation -----------------------------------------------------
 
     def generate_grounded(
-        self, evidence: list[dict[str, Any]], language: str = "en", offer: str = "create"
+        self,
+        evidence: list[dict[str, Any]],
+        language: str = "en",
+        offer: str = "create",
+        question: str = "",
     ) -> str:
         """Extractive grounded answer: every claim comes from a retrieved
         chunk, each tagged with its citation marker (FR-15 contract).
