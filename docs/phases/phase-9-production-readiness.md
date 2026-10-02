@@ -12,7 +12,7 @@ strengthen distributed persistence/cache beyond SQLite/local backends."
 | 9.1 Hugging Face provider | skeleton model boundaries → real LLM + embeddings | ✅ implemented |
 | 9.2 Redis cache | `RedisCache` raised on use → real client | ✅ implemented |
 | 9.3 DynamoDB store | `DynamoDBStore` raised on use → real boto3 impl | ✅ implemented |
-| 9.4 Deployed auth | stub header on Render → JWT mode + token flow | docs + config |
+| 9.4 Deployed auth | stub header → real Supabase Auth (signup/signin/forgot) + JWT mode | ✅ implemented |
 | 9.5 HF MCP server | agent tooling for HF Hub (spaces/models/datasets) | config added |
 
 ## Delivered
@@ -56,13 +56,22 @@ employees — behind the documented key schema:
 Enabled via `REGINTEL_STORE_BACKEND=dynamodb` + table prefix env; tested
 end-to-end against `moto` mocked DynamoDB (no AWS account needed).
 
-### 9.4 Deployed auth (JWT on Render)
+### 9.4 Real backend auth (Supabase + JWT modes)
 
-Deployment doc runbook for `REGINTEL_AUTH_MODE=jwt` +
-`REGINTEL_JWT_SECRET` on Render: mint a long-lived evaluator token with
-`scripts/mint_dev_token.py --sub e999`, paste it into the Streamlit
-sidebar bearer field (or store it as a Streamlit secret for unattended
-demo).
+Two real authentication paths, both config-selected:
+
+- **`REGINTEL_AUTH_MODE=supabase`** — full account system: email/password
+  signup, signin, forgot-password, signout through `/v1/auth/*` (Supabase
+  keys stay server-side). Identity = Supabase JWT verified via JWKS,
+  mapped to an employee through `public.profiles` under an
+  **admin-assigns** model — signup alone grants nothing; an admin links
+  the account to an employee record (roles/department copied from the
+  employees table, never user-editable claims). Bootstrap via
+  `scripts/supabase_link_user.py`. Streamlit sidebar auto-switches to a
+  sign-in form.
+- **`REGINTEL_AUTH_MODE=jwt`** — HS256 dev tokens or Entra JWKS; mint a
+  long-lived evaluator token with `scripts/mint_dev_token.py --sub e999`
+  (deployment doc runbook).
 
 ### 9.5 HF MCP server (`.devin/mcp_config.json`)
 

@@ -42,23 +42,120 @@ def send_feedback(message_id: str, rating: str, employee_id: str) -> None:
     )
 
 
+def api_auth_mode() -> str:
+    try:
+        return httpx.get(f"{API_BASE}/health", timeout=5).json().get("auth_mode", "stub")
+    except Exception:
+        return "stub"
+
+
+def signin_form() -> None:
+    """Supabase auth UI — signin/signup/forgot-password, all through our API.
+    On success the access token lands in st.session_state.bearer_token."""
+    if st.session_state.get("bearer_token"):
+        me = {}
+        try:
+            me = httpx.get(
+                f"{API_BASE}/v1/auth/me", headers=headers(""), timeout=10
+            ).json()
+        except Exception:
+            pass
+        if me.get("employee_id"):
+            st.success(f"Signed in as {me['name']} ({me['employee_id']})")
+        if st.button("Sign out"):
+            httpx.post(f"{API_BASE}/v1/auth/signout", headers=headers(""), timeout=10)
+            st.session_state.pop("bearer_token", None)
+            st.session_state.pop("conversation_id", None)
+            st.session_state.pop("messages", None)
+            st.rerun()
+        return
+
+    tab_in, tab_up, tab_forgot = st.tabs(["Sign in", "Sign up", "Forgot"])
+    with tab_in:
+        with st.form("signin"):
+            email = st.text_input("Email", key="si_email")
+            password = st.text_input("Password", type="password", key="si_pw")
+            if st.form_submit_button("Sign in"):
+                try:
+                    resp = httpx.post(
+                        f"{API_BASE}/v1/auth/signin",
+                        json={"email": email, "password": password},
+                        timeout=15,
+                    )
+                    if resp.status_code == 200:
+                        body = resp.json()
+                        st.session_state.bearer_token = body["access_token"]
+                        if body.get("approved"):
+                            st.rerun()
+                        else:
+                            st.warning(body.get("message", "Pending approval."))
+                    else:
+                        st.error(resp.json().get("detail", "Sign-in failed"))
+                except Exception as exc:
+                    st.error(f"Auth service unreachable: {exc}")
+    with tab_up:
+        with st.form("signup"):
+            st.text_input("Name", key="su_name")
+            st.text_input("Email", key="su_email")
+            st.text_input("Password (min 8 chars)", type="password", key="su_pw")
+            if st.form_submit_button("Create account"):
+                try:
+                    resp = httpx.post(
+                        f"{API_BASE}/v1/auth/signup",
+                        json={
+                            "email": st.session_state.su_email,
+                            "password": st.session_state.su_pw,
+                            "name": st.session_state.su_name,
+                        },
+                        timeout=15,
+                    )
+                    if resp.status_code in (200, 201):
+                        st.success(resp.json().get("message", "Account created."))
+                    else:
+                        st.error(resp.json().get("detail", "Sign-up failed"))
+                except Exception as exc:
+                    st.error(f"Auth service unreachable: {exc}")
+    with tab_forgot:
+        with st.form("forgot"):
+            st.text_input("Email", key="fp_email")
+            if st.form_submit_button("Send reset link"):
+                try:
+                    httpx.post(
+                        f"{API_BASE}/v1/auth/forgot-password",
+                        json={"email": st.session_state.fp_email},
+                        timeout=15,
+                    )
+                    st.success("If that email is registered, a reset link is on its way.")
+                except Exception as exc:
+                    st.error(f"Auth service unreachable: {exc}")
+
+
 with st.sidebar:
     st.header("Session")
-    employee_label = st.selectbox("Employee", list(EMPLOYEES))
-    employee_id = EMPLOYEES[employee_label]
+    mode = api_auth_mode()
+    if mode == "supabase":
+        signin_form()
+        if not st.session_state.get("bearer_token"):
+            st.info("Sign in to use the assistant.")
+            st.stop()
+        employee_id = ""  # identity comes from the token, not a picker
+    else:
+        employee_label = st.selectbox("Employee", list(EMPLOYEES))
+        employee_id = EMPLOYEES[employee_label]
+        if mode == "jwt":
+            st.text_input(
+                "Bearer token (JWT mode only)",
+                key="bearer_token",
+                type="password",
+                help="Only needed when the API runs with REGINTEL_AUTH_MODE=jwt",
+            )
     usecase_label = st.selectbox("Use case", list(USECASES))
     usecase_id = USECASES[usecase_label]
     if st.button("New conversation"):
         st.session_state.pop("conversation_id", None)
         st.session_state.pop("messages", None)
         st.rerun()
-    st.caption(f"API: {API_BASE}")
-    st.text_input(
-        "Bearer token (JWT mode only)",
-        key="bearer_token",
-        type="password",
-        help="Only needed when the API runs with REGINTEL_AUTH_MODE=jwt",
-    )
+    st.caption(f"API: {API_BASE} · auth: {mode}")
 
     st.subheader("Conversations")
     try:

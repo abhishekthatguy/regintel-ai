@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_admin import router as admin_router
+from app.api.routes_auth import router as auth_router
 from app.api.routes_conversations import router as conversations_router
 from app.api.routes_health import router as health_router
 from app.api.routes_integrations import router as integrations_router
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health_router)
+    app.include_router(auth_router)
     app.include_router(conversations_router)
     app.include_router(admin_router)
     app.include_router(integrations_router)

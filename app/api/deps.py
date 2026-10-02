@@ -109,17 +109,31 @@ async def get_identity(
 ) -> UserContext:
     """Auth-mode switch (FR-01): 'stub' resolves the demo header; 'jwt'
     cryptographically validates a Bearer token on every request."""
-    if settings.auth_mode == "jwt":
+    if settings.auth_mode in ("jwt", "supabase"):
         from fastapi import HTTPException
 
-        from app.identity.jwt import AuthError, JWTIdentityProvider
+        from app.identity.jwt import AuthError
 
-        provider = JWTIdentityProvider(
-            issuer=settings.jwt_issuer,
-            audience=settings.jwt_audience,
-            secret=settings.jwt_secret,
-            jwks_url=settings.jwt_jwks_url,
-        )
+        if settings.auth_mode == "supabase":
+            from app.identity.supabase import SupabaseIdentityProvider
+            from app.identity.supabase_client import SupabaseClient
+
+            provider = SupabaseIdentityProvider(
+                SupabaseClient(
+                    url=settings.supabase_url,
+                    publishable_key=settings.supabase_publishable_key,
+                    secret_key=settings.supabase_secret_key,
+                )
+            )
+        else:
+            from app.identity.jwt import JWTIdentityProvider
+
+            provider = JWTIdentityProvider(
+                issuer=settings.jwt_issuer,
+                audience=settings.jwt_audience,
+                secret=settings.jwt_secret,
+                jwks_url=settings.jwt_jwks_url,
+            )
         token = (
             authorization.removeprefix("Bearer ").strip()
             if authorization and authorization.startswith("Bearer ")

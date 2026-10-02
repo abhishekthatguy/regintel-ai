@@ -333,6 +333,36 @@ class DynamoDBStore:
         )
         return self._item_to_message(items[0]) if items else None
 
+    # --- employees --------------------------------------------------------
+
+    def get_employee(self, employee_id: str) -> dict | None:
+        resp = self._tickets().get_item(
+            Key={"pk": f"EMP#{employee_id}", "sk": "PROFILE"}
+        )
+        item = resp.get("Item")
+        if not item:
+            return None
+        return {
+            "employee_id": item["employee_id"],
+            "name": item.get("name", ""),
+            "department": item.get("department", ""),
+            "email": item.get("email", ""),
+            "roles": item.get("roles") or ["employee"],
+        }
+
+    def upsert_employee(self, employee: dict) -> None:
+        self._tickets().put_item(
+            Item={
+                "pk": f"EMP#{employee['employee_id']}",
+                "sk": "PROFILE",
+                "employee_id": employee["employee_id"],
+                "name": employee.get("name", ""),
+                "department": employee.get("department", ""),
+                "email": employee.get("email", ""),
+                "roles": employee.get("roles", ["employee"]),
+            }
+        )
+
     # --- tickets ---------------------------------------------------------
 
     def _ticket_items(self, employee_id: str) -> list[dict]:

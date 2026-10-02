@@ -271,6 +271,32 @@ class SQLiteStore:
                 (status, conversation_id),
             )
 
+    # --- employees ---
+
+    def get_employee(self, employee_id: str) -> dict | None:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT * FROM employees WHERE employee_id = ?", (employee_id,)
+            ).fetchone()
+        if not row:
+            return None
+        emp = dict(row)
+        emp["roles"] = json.loads(emp.pop("roles_json") or "[]")
+        return emp
+
+    def upsert_employee(self, employee: dict) -> None:
+        with self._session() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO employees VALUES (?, ?, ?, ?, ?)",
+                (
+                    employee["employee_id"],
+                    employee["name"],
+                    employee["department"],
+                    employee.get("email"),
+                    json.dumps(employee.get("roles", ["employee"])),
+                ),
+            )
+
     # --- tickets (Phase 1 demo store; enterprise ITSM adapter later) ---
 
     def list_tickets(self, employee_id: str, open_only: bool = False) -> list[dict]:

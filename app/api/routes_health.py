@@ -7,7 +7,12 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health(settings: SettingsDep) -> dict:
-    return {"status": "ok", "env": settings.env, "version": "0.1.0"}
+    return {
+        "status": "ok",
+        "env": settings.env,
+        "version": "0.1.0",
+        "auth_mode": settings.auth_mode,
+    }
 
 
 @router.get("/ready")

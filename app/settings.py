@@ -26,11 +26,16 @@ class Settings(BaseSettings):
     # --- Phase 3: auth / cloud backend switches ---
     # "stub" keeps the X-Demo-Employee header path; "jwt" requires a Bearer
     # token validated for signature/issuer/audience/expiry on every request.
-    auth_mode: str = "stub"
+    auth_mode: str = "stub"  # "jwt" -> HS256/JWKS tokens; "supabase" -> Supabase Auth
     jwt_issuer: str = "regintel-dev"
     jwt_audience: str = "regintel-api"
     jwt_secret: str = ""  # HS256 dev key — never a real secret in repo/.env.example
     jwt_jwks_url: str = ""  # Entra JWKS endpoint when set (RS256)
+
+    # --- Phase 9: Supabase Auth (signup/signin/forgot-password + JWT) ---
+    supabase_url: str = ""  # https://<ref>.supabase.co
+    supabase_publishable_key: str = ""  # sb_publishable_* — safe for auth calls
+    supabase_secret_key: str = ""  # sb_secret_* — server-side profile ops only
 
     # Backend selection — enterprise implementations swap in via config.
     store_backend: str = "sqlite"  # "dynamodb" -> DynamoDBStore (needs AWS cfg)

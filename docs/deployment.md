@@ -116,7 +116,50 @@ Trade-off: JWT mode blocks click-through demos (every user needs a
 token), so the submitted instance intentionally stays on `stub` while
 the JWT path remains one env-var flip away.
 
-## 5. Cloud backends (production path)
+## 5. Supabase Auth (real signup/signin — production path)
+
+`REGINTEL_AUTH_MODE=supabase` swaps stub auth for a real account system —
+email/password signup + signin + forgot-password, all proxied through
+`/v1/auth/*` so Supabase keys never reach the browser.
+
+Setup on a dedicated Supabase project:
+
+1. Create the project (dashboard → New project). Grab URL + keys from
+   **Settings → API Keys** (publishable + secret — not the legacy
+   anon/service_role unless required).
+2. Run `db/supabase_profiles.sql` in the project SQL editor — creates
+   `public.profiles` with RLS (users read their own row; writes are
+   server-only).
+3. Set env vars (local `.env` / Render dashboard):
+   ```
+   REGINTEL_AUTH_MODE=supabase
+   REGINTEL_SUPABASE_URL=https://<ref>.supabase.co
+   REGINTEL_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   REGINTEL_SUPABASE_SECRET_KEY=sb_secret_...
+   ```
+4. Bootstrap the first admin link (assigning requires an approved admin):
+   ```bash
+   # sign up via the UI first, then grab the user's UUID from
+   # Supabase dashboard → Authentication → Users
+   REGINTEL_SUPABASE_URL=... REGINTEL_SUPABASE_SECRET_KEY=... \
+     .venv/bin/python scripts/supabase_link_user.py <auth-user-uuid> e999
+   ```
+   After that, admins link accounts via `GET /v1/auth/pending-users` +
+   `POST /v1/auth/assign-employee`.
+
+How it works: signup creates the auth account + a **pending** profile —
+it can't do anything until an admin assigns an employee (department +
+roles copied from the employees table, never from user-editable fields).
+Requests verify the Supabase JWT via JWKS
+(`/auth/v1/.well-known/jwks.json`), falling back to `GET /auth/v1/user`
+for HS256-signed projects. The Streamlit sidebar shows a sign-in form
+automatically when the API reports `auth_mode=supabase`.
+
+Email delivery for confirm/reset links uses Supabase's built-in SMTP on
+the free tier (rate-limited — fine for demo; configure custom SMTP for
+production).
+
+## 6. Cloud backends (production path)
 
 Local defaults are SQLite + in-process TTL cache. The production
 adapters are real and config-selected:
