@@ -1,0 +1,54 @@
+%% RegIntel AI — end-user flow through the app (UI journey, incl. auth + chat)
+flowchart TD
+    U([User opens app]) --> MODE{"Auth mode?<br/><i>/health → auth_mode</i>"}
+
+    MODE -->|"stub · demo"| PICK["Pick employee + use case<br/><i>sidebar dropdowns</i>"]
+    MODE -->|"jwt"| TOK["Paste bearer token"]
+    MODE -->|"supabase"| AUTHUI{"Has account?"}
+
+    AUTHUI -->|"sign in"| SIGNIN["Email + password<br/>POST /v1/auth/signin"]
+    AUTHUI -->|"new"| SIGNUP["Name + email + password<br/>POST /v1/auth/signup"]
+    AUTHUI -->|"forgot"| FORGOT["Email → reset link<br/>POST /v1/auth/forgot-password"]
+    FORGOT --> EMAIL["Reset email → new password<br/><i>Supabase hosted flow</i>"] --> SIGNIN
+    SIGNUP --> PEND["Pending profile created<br/><i>no access until linked</i>"]
+    PEND -.->|"admin assigns employee"| APPROVED
+    SIGNIN --> APPROVED{"Profile approved?<br/><i>profiles.approved</i>"}
+    APPROVED -->|"no"| BLOCKED["See 'pending admin approval'<br/>— every API call 401s"]
+    APPROVED -->|"yes"| CHAT
+
+    PICK --> CHAT
+    TOK --> CHAT
+    CHAT["💬 New conversation<br/>select use case"] --> MSG["User types a message"]
+
+    MSG --> CLS{"Intent"}
+    CLS -->|"question / issue"| KA["Grounded answer<br/>+ citation cards c1..c3<br/>+ 👍/👎 feedback"]
+    KA --> OFFER{"Offer at end"}
+    OFFER -->|"user: yes"| NEXTOFFER["Run offered action<br/><i>check tickets → then offer create</i>"]
+    OFFER -->|"user: no"| IDLE1(["Done — context reset"])
+    NEXTOFFER --> MSG
+
+    CLS -->|"show my tickets"| TL["List real tickets<br/><i>TCK-#### only — never invented</i><br/>+ offer: create new?"]
+    TL --> OFFER
+
+    CLS -->|"create a ticket"| MISS{"Fields complete?<br/><i>mined from earlier turns too</i>"}
+    MISS -->|"missing"| ASK["Bot asks for exact fields<br/><i>category, description, priority</i>"] --> MSG
+    MISS -->|"complete"| CONFIRM["Confirm card:<br/>'Create X ticket? (yes/no)'"]
+    CONFIRM -->|"yes"| DEDUP{"Open ticket<br/>same category?"}
+    DEDUP -->|"yes"| REUSE["Reuse existing ticket<br/><i>no duplicate written</i>"]
+    DEDUP -->|"no"| CREATE["TCK-#### created"]
+    CONFIRM -->|"no"| CANCEL["Cancelled — nothing written"]
+    REUSE & CREATE & CANCEL --> IDLE1
+
+    CLS -->|"employee id typed<br/>EMP1024"| GUARD["Profile acknowledged —<br/>identity never switched<br/>+ offer: check tickets"]
+    GUARD --> OFFER
+
+    CLS -->|"crm / case"| CRMF["CRM lookup or case create<br/><i>same clarify→confirm→dedupe contract</i>"] --> CONFIRM
+
+    CLS -->|"gibberish / out of scope"| HONEST["'No evidence found —<br/>won't guess'<br/>+ offer: create ticket"]
+    HONEST --> OFFER
+
+    style CONFIRM fill:#f96,stroke:#333
+    style DEDUP fill:#fc3,stroke:#333
+    style BLOCKED fill:#e77,stroke:#333
+    style GUARD fill:#fc3,stroke:#333
+    style HONEST fill:#cef,stroke:#333
