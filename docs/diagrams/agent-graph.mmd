@@ -1,0 +1,54 @@
+%% RegIntel AI — LangGraph agent flow (mirrors app/agent/graph.py exactly)
+flowchart TD
+    START([START]) --> initialize["initialize<br/><i>persist msg, input guard, mine fields,<br/>employee-id + offered-action checks</i>"]
+
+    initialize -->|"input_blocked"| guardrail
+    initialize --> classify["classify<br/><i>intent via ChatModel</i>"]
+
+    classify -->|"error"| error_handler
+    classify -->|"direct"| generate
+    classify -->|"knowledge"| build_filters
+    classify -->|"ticket_lookup"| ticket_lookup
+    classify -->|"crm_lookup"| crm_lookup
+    classify -->|"ticket_create / crm_case_create"| missing{"missing<br/>fields?"}
+    classify -->|"confirm"| by_action{"pending_action?"}
+    classify -->|"cancel"| guardrail
+    classify -->|"reconfirm"| confirm_action
+
+    missing -->|"yes"| clarify["clarify<br/><i>name exact missing fields</i>"]
+    clarify --> guardrail
+    missing -->|"no"| duplicate_check["duplicate_check<br/><i>open ticket same category?</i>"]
+
+    duplicate_check -->|"error"| error_handler
+    duplicate_check -->|"duplicate found"| guardrail
+    duplicate_check -->|"unique"| confirm_action["confirm_action<br/><i>explicit confirm gate — never auto-write</i>"]
+    confirm_action --> guardrail
+
+    by_action -->|"ticket"| ticket_create["ticket_create<br/><i>write, idempotent</i>"]
+    by_action -->|"crm"| crm_case_create["crm_case_create<br/><i>CRM adapter write</i>"]
+
+    build_filters["build_filters<br/><i>department ACL filter</i>"] --> retrieve["retrieve<br/><i>query rewrite → hybrid BM25+vector<br/>→ rerank ≥0.05 → citations</i>"]
+
+    retrieve -->|"error"| error_handler
+    retrieve -->|"found / not_found"| generate["generate<br/><i>grounded answer + citations,<br/>offer next action</i>"]
+
+    ticket_lookup -->|"error"| error_handler
+    ticket_lookup -->|"real tickets only"| guardrail
+    crm_lookup -->|"error"| error_handler
+    crm_lookup -->|"crm data"| guardrail
+    ticket_create -->|"error"| error_handler
+    ticket_create -->|"created"| guardrail
+    crm_case_create -->|"error"| error_handler
+    crm_case_create -->|"created"| guardrail
+
+    generate --> guardrail["guardrail<br/><i>output checks, PII, refusal hygiene</i>"]
+    error_handler["error_handler<br/><i>graceful tool-failure message</i>"] --> guardrail
+
+    guardrail --> respond["respond<br/><i>persist assistant msg,<br/>usage+cost, audit</i>"]
+    respond --> END([END])
+
+    style guardrail fill:#f96,stroke:#333
+    style confirm_action fill:#f96,stroke:#333
+    style duplicate_check fill:#fc3,stroke:#333
+    style clarify fill:#fc3,stroke:#333
+    style error_handler fill:#e77,stroke:#333

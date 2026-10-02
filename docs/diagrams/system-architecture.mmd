@@ -1,0 +1,72 @@
+%% RegIntel AI — system flow: UI → API → agent → tools → stores/providers
+%% Every box on the right edge is a config-swappable adapter boundary.
+flowchart LR
+    subgraph Clients["Clients"]
+        ST["Streamlit UI<br/><i>:8501 · demo</i>"]
+        NG["Angular 21<br/><i>:4200 · production-grade</i>"]
+        GN["Genesys agent-assist<br/><i>/v1/integrations/genesys/suggest</i>"]
+    end
+
+    subgraph API["FastAPI · :8000"]
+        MW["CorrelationId middleware"]
+        AUTH["get_identity<br/><i>auth_mode switch</i>"]
+        RT["routes: conversations · admin · auth · integrations · health"]
+        subgraph Provider["Identity providers"]
+            STUB["stub<br/><i>X-Demo-Employee</i>"]
+            JWTP["jwt<br/><i>HS256 / Entra JWKS</i>"]
+            SB["supabase<br/><i>JWKS + profiles table<br/>(admin-assigns)</i>"]
+        end
+        AUTH --> STUB & JWTP & SB
+    end
+
+    subgraph Agent["LangGraphRunner"]
+        GRAPH["agent graph<br/><i>see agent-graph.mmd</i>"]
+        CKPT["AsyncSqliteSaver<br/><i>conversation state</i>"]
+        LLM{"ChatModel<br/>factory"}
+        LOC["local deterministic<br/><i>always-on fallback</i>"]
+        HF["HFChatModel<br/><i>Llama-3.1-8B · hf provider</i>"]
+        BR["BedrockChatModel<br/><i>Converse API</i>"]
+        LLM --> LOC & HF & BR
+        CKPT -.-> GRAPH
+        LLM -.-> GRAPH
+    end
+
+    subgraph Tools["Tools (ToolContext)"]
+        KB["knowledge_search"]
+        TCK["ticket_lookup / create"]
+        CRM["crm_lookup / case_create"]
+    end
+
+    subgraph Data["Data & retrieval"]
+        HYB["HybridRetriever<br/>BM25 + vector RRF"]
+        EMB{"Embedder"}
+        HASH["hashing (offline)"]
+        HFE["HFEmbedder<br/><i>MiniLM-L6-v2</i>"]
+        BRE["Bedrock Titan"]
+        EMB --> HASH & HFE & BRE
+        STORE{"Store"}
+        SQL["SQLite<br/><i>local default</i>"]
+        DDB["DynamoDBStore<br/><i>boto3 · 4 tables</i>"]
+        STORE --> SQL & DDB
+        CACHE{"Cache (FR-21)"}
+        TTL["LocalTTL"]
+        RDS["RedisCache<br/><i>redis-py</i>"]
+        CACHE --> TTL & RDS
+        CRMADP{"CRMAdapter"}
+        LCRM["LocalCRM<br/><i>seed JSON</i>"]
+        XCRM["enterprise CRM<br/><i>HTTP adapter</i>"]
+        CRMADP --> LCRM & XCRM
+    end
+
+    Clients --> MW --> AUTH --> RT --> GRAPH
+    GRAPH --> KB & TCK & CRM
+    KB --> HYB --> EMB
+    KB --> CACHE
+    KB --> STORE
+    TCK --> STORE
+    CRM --> CRMADP
+    SB -.->|"REST: auth/v1 + profiles"| SBX[("Supabase project<br/><i>dedicated RegIntel</i>")]
+
+    style Provider fill:#efe,stroke:#333
+    style Agent fill:#eef,stroke:#333
+    style Data fill:#ffe,stroke:#333

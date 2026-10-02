@@ -13,6 +13,8 @@ Source of truth for requirements: `../RegIntel_AI_Business_Requirements_Document
 | [decisions-and-open-questions.md](decisions-and-open-questions.md) | Resolved clarifications (OpenText, Genesys Cloud, rubrics) and remaining open questions |
 | [evaluation-framework.md](evaluation-framework.md) | Rubric definitions, pass targets, golden dataset approach, CI gates |
 | [requirements-traceability.md](requirements-traceability.md) | Every BRD FR/NFR mapped to a delivery phase |
+| [diagrams/agent-graph.mmd](diagrams/agent-graph.mmd) | LangGraph node flow — intents, confirm gate, dedupe, guardrail (mirrors `app/agent/graph.py`) |
+| [diagrams/system-architecture.mmd](diagrams/system-architecture.mmd) | System flow — clients → API → agent → tools → adapter boundaries (stores/cache/models/auth) |
 
 ## Phase plans
 
