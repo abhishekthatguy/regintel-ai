@@ -5,6 +5,19 @@ from app.api.deps import SettingsDep, StoreDep, UseCaseDep
 router = APIRouter(tags=["health"])
 
 
+@router.get("/")
+async def root(settings: SettingsDep) -> dict:
+    return {
+        "service": "RegIntel AI",
+        "version": "0.1.0",
+        "env": settings.env,
+        "auth_mode": settings.auth_mode,
+        "docs": "/docs",
+        "health": "/health",
+        "ready": "/ready",
+    }
+
+
 @router.get("/health")
 async def health(settings: SettingsDep) -> dict:
     return {
