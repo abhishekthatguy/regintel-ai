@@ -11,7 +11,14 @@ INTENT_CONFIRM = "confirm"
 INTENT_CANCEL = "cancel"
 
 CONFIRM_WORDS = {"yes", "y", "confirm", "confirmed", "proceed", "ok", "okay", "sure", "go ahead"}
-CANCEL_WORDS = {"no", "n", "cancel", "stop", "nevermind", "never mind", "abort", "don't"}
+# Exact-match only — "no internet is working" is an issue report, not a
+# decline; polite decline phrases must be listed explicitly.
+CANCEL_WORDS = {
+    "no", "n", "cancel", "stop", "nevermind", "never mind", "abort", "don't",
+    "no thanks", "no thank you", "nah", "i'm good", "im good",
+    "that's all", "thats all", "nothing else", "no it's fine", "no its fine",
+    "no it's ok", "no it's okay", "no its ok", "no its okay", "no need",
+}
 
 
 def is_confirmation(message: str) -> bool:

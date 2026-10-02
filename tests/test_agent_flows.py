@@ -97,6 +97,15 @@ def test_stray_yes_without_pending_is_graceful(client):
     assert "help" in r["answer"].lower()
 
 
+def test_polite_decline_dismisses_offer(client):
+    conv = create_conv(client)
+    send(client, conv, "show my tickets")  # response ends with a create offer
+    r = send(client, conv, "no thanks")
+    assert "retrieve" not in r["nodes"]
+    assert not r["citations"]
+    assert "anything else" in r["answer"].lower()
+
+
 def test_not_found_for_unknown_topic(client):
     conv = create_conv(client)
     r = send(client, conv, "what is the capital of France?")

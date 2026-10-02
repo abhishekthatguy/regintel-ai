@@ -35,6 +35,7 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [9](phases/phase-9-production-readiness.md) | Production Readiness ✅ | HF LLM + semantic embeddings, real Redis cache, real DynamoDB store (moto-tested), JWT on Render, HF MCP |
 
 Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough ·
+[e2e-test-checklist.md](e2e-test-checklist.md) — manual question→expected-answer matrix for all three use cases ·
 [SUBMISSION.md](SUBMISSION.md) — requirement→artifact checklist ·
 [pitch-deck.md](pitch-deck.md) — slide source for `submission/RegIntel-AI-Pitch-Deck.pptx`.
 
