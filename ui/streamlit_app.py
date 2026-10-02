@@ -158,21 +158,30 @@ with st.sidebar:
     st.caption(f"API: {API_BASE} · auth: {mode}")
 
     st.subheader("Conversations")
+    convs: list = []
     try:
-        convs = httpx.get(
+        resp = httpx.get(
             f"{API_BASE}/v1/conversations", headers=headers(employee_id), timeout=10
-        ).json()
+        )
+        if resp.status_code == 200:
+            convs = resp.json()
+        elif resp.status_code in (401, 403):
+            st.warning("Not authenticated — the API requires a valid token.")
     except Exception:
-        convs = []
+        pass
     options = {"(none)": None} | {
         f"{c['title'][:28]} · {c['updated_at'][:10]}": c["conversation_id"] for c in convs
     }
     picked = st.selectbox("Resume", list(options))
     if options[picked] and options[picked] != st.session_state.get("conversation_id"):
         conv_id = options[picked]
-        detail = httpx.get(
+        resp = httpx.get(
             f"{API_BASE}/v1/conversations/{conv_id}", headers=headers(employee_id), timeout=10
-        ).json()
+        )
+        if resp.status_code != 200:
+            st.error(f"Could not load conversation: {resp.status_code}")
+            st.stop()
+        detail = resp.json()
         st.session_state.conversation_id = conv_id
         st.session_state.messages = [
             {
@@ -256,6 +265,14 @@ if prompt := st.chat_input("Ask something…"):
             json={"content": prompt},
             timeout=60,
         ) as stream:
+            if stream.status_code != 200:
+                raw = stream.read().decode("utf-8", "replace")
+                try:
+                    raw = json.loads(raw).get("detail", raw)
+                except Exception:
+                    pass
+                st.error(f"API error {stream.status_code}: {raw}")
+                st.stop()
             for line in stream.iter_lines():
                 if not line:
                     continue
