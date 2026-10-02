@@ -70,6 +70,33 @@ def test_cancel_stops_creation(client):
     assert "cancel" in r["answer"].lower()
 
 
+def test_cancel_reports_action_and_offers_help(client):
+    conv = create_conv(client)
+    send(client, conv, "create a ticket my mouse stopped working entirely")
+    r = send(client, conv, "no")
+    assert "cancelled the ticket creation" in r["answer"].lower()
+    assert "anything else" in r["answer"].lower()
+
+
+def test_cancel_keeps_context_for_resume(client):
+    conv = create_conv(client)
+    r1 = send(client, conv, "create a ticket my mouse stopped working entirely")
+    assert "confirm_action" in r1["nodes"]
+    send(client, conv, "no")  # cancel — fields stay in state
+    r = send(client, conv, "create a ticket")  # resume without re-asking
+    assert "clarify" not in r["nodes"]
+    assert "confirm_action" in r["nodes"]
+    assert "mouse stopped working" in r["answer"]
+
+
+def test_stray_yes_without_pending_is_graceful(client):
+    conv = create_conv(client)
+    r = send(client, conv, "yes")
+    assert "retrieve" not in r["nodes"]
+    assert not r["citations"]
+    assert "help" in r["answer"].lower()
+
+
 def test_not_found_for_unknown_topic(client):
     conv = create_conv(client)
     r = send(client, conv, "what is the capital of France?")

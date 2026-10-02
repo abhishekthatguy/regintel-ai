@@ -188,6 +188,17 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
                     "offered_action": None,
                 }
 
+        # Bare "yes"/"no" with nothing pending and no live offer: reply
+        # gracefully instead of running retrieval on the word itself —
+        # context (fields, last_topic) is kept so the user can resume.
+        if (
+            not offered
+            and not state.get("pending_action")
+            and (is_confirmation(message) or is_cancellation(message))
+        ):
+            key = "yes_without_offer" if is_confirmation(message) else "no_without_offer"
+            return {"intent": INTENT_DIRECT, "answer": model.respond(key)}
+
         # Tool allowlist is enforced server-side from use-case config —
         # a disabled tool can never execute regardless of the request.
         required_tool = INTENT_TOOL.get(intent)
@@ -202,8 +213,16 @@ def build_graph(ctx: ToolContext, model, checkpointer) -> Any:
         update: dict = {"intent": intent, "offered_action": None}
 
         if intent == INTENT_CANCEL and state.get("pending_action"):
+            # Name what was cancelled and keep `fields`/`last_topic` —
+            # the conversation isn't reset, so the user can resume the
+            # same action without re-answering collected fields.
+            action = (
+                "CRM case"
+                if state["pending_action"].get("action_type") == "crm_case_create"
+                else "ticket creation"
+            )
             update["pending_action"] = None
-            update["answer"] = model.respond("cancelled")
+            update["answer"] = model.respond("cancelled", action=action)
         elif intent == INTENT_TICKET_CREATE:
             fields = model.extract_fields(message, state.get("fields", {}))
             fields = _mine_missing_fields(

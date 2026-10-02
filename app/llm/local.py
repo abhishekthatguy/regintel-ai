@@ -205,8 +205,13 @@ TEMPLATES = {
         "Done — ticket **{ticket_id}** created ({category}, {priority} priority). "
         "The support team will pick it up. Anything else?"
     ),
-    "cancelled": "Okay, I've cancelled that. No ticket was created.",
+    "cancelled": (
+        "Okay — I've cancelled the {action}. Nothing was created. "
+        "Is there anything else I can help you with?"
+    ),
     "offer_declined": "No problem — I won't do that. Anything else I can help with?",
+    "yes_without_offer": "Sure — what would you like help with?",
+    "no_without_offer": "Alright — I'm here if you need anything else.",
     "profile": (
         "I found your profile — you're signed in as **{name}** "
         "({employee_id}, {department}). Would you like me to check your "
