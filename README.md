@@ -11,6 +11,10 @@ A configuration-driven agentic assistant: employees ask questions, get evidence-
 | **App (Streamlit)** | https://regintel-ai-test.streamlit.app |
 | API (Render) | https://regintel-api-xuhl.onrender.com |
 | API health | https://regintel-api-xuhl.onrender.com/health |
+| API readiness | https://regintel-api-xuhl.onrender.com/ready |
+| API docs (Swagger) | https://regintel-api-xuhl.onrender.com/docs |
+| OpenAPI spec | https://regintel-api-xuhl.onrender.com/openapi.json |
+| Source (GitHub) | https://github.com/abhishekthatguy/regintel-ai |
 
 Sign in by picking a demo employee in the sidebar (`e001` IT · `e002` HR · `e003` Finance · `e999` admin) — no password/token needed in stub mode. Try *"how do I connect to the VPN"* for a cited answer, or the full walkthrough in `docs/demo-script.md`.
 
@@ -18,7 +22,20 @@ Sign in by picking a demo employee in the sidebar (`e001` IT · `e002` HR · `e0
 
 ## Status
 
-**Phase 8 — Quality & Completeness (local slice).** LangGraph agent with 5 tools (knowledge search, ticket lookup/create, CRM lookup/create) behind conditional routing; multi-turn state via SQLite checkpointer; clarify → duplicate-check → confirm → create flow shared by tickets and CRM cases; full-contract citations; feedback; guardrails; voice I/O via Web Speech API; Genesys agent-assist endpoint; three departments onboarded by config only; advanced analytics (dept cost attribution, adoption funnel, unmet-need clustering); department-owner self-service views; Streamlit + Angular UIs; golden eval suite.
+**Phase 9 — Production Readiness.** Phase 8 delivered the full local slice; Phase 9 turns the adapter skeletons into working cloud backends: Hugging Face LLM + semantic embeddings, real Redis cache, real DynamoDB store, and Supabase Auth (signup/signin/forgot-password + admin approval) alongside JWT/JWKS. Everything still degrades to local stubs, so the demo runs credential-free.
+
+## Features
+
+- **Evidence-grounded answers** — every claim cites document, section, chunk, excerpt, retrieval/rerank scores, version, and source URL; unanswerable queries get an explicit "won't guess" response
+- **Governed write actions** — ticket and CRM case creation share one safety contract: field validation → duplicate detection → explicit confirm → idempotent write → audit
+- **Three auth modes** — `stub` (demo), `jwt` (HS256 dev / Entra JWKS), `supabase` (real accounts with admin-assigned employee linking)
+- **Multi-turn context** — short follow-ups and "yes" resolve against conversation state; query rewriting expands anaphoric references before retrieval
+- **Department-scoped everything** — retrieval filters by the caller's department; tickets/cases scoped to the caller; three departments onboarded by YAML only
+- **5 tools behind a server-side allowlist** — knowledge search, ticket lookup/create, CRM lookup/create; user text can never reach a disabled tool
+- **Feedback + audit + analytics** — thumbs ratings, full audit log, per-department cost attribution, adoption funnel, unmet-need clustering
+- **Ingestion pipeline** — markdown corpus → chunking → hybrid index, checksum drift detection, dead-lettered failures, admin upload endpoint
+- **Two UIs** — Streamlit demo app (citations, tool trace, eval runner, admin page) and Angular 21 end-user app (voice I/O, analytics dashboard)
+- **Cloud-swappable backends** — LLM (local/HF/Bedrock), embedder (hashing/MiniLM/Titan), store (SQLite/DynamoDB), cache (TTL/Redis), CRM adapter, speech — all via env config
 
 ## Problem statement
 
@@ -34,7 +51,7 @@ A configuration-driven agentic assistant: authenticate an employee, retrieve dep
 Employee (Angular :4200 · Streamlit :8501 · Genesys agent-assist)
       │  NDJSON stream: status → tokens → citations → usage
       ▼
-FastAPI ── identity (stub │ JWT/JWKS) ── audit_log ── use-case config
+FastAPI ── identity (stub │ JWT/JWKS │ Supabase Auth) ── audit_log ── use-case config
       ▼
 LangGraph ── initialize → classify → conditional route
       │        ├─ knowledge_query → build_filters → retrieve → generate → guardrail
@@ -44,22 +61,55 @@ LangGraph ── initialize → classify → conditional route
       ▼
 Tools (server-side allowlist) → hybrid retriever (BM25 + vector → RRF → rerank, ACL-filtered)
       ▼
-SQLite store · ingestion pipeline · audit · analytics
+Store (SQLite │ DynamoDB) · Cache (local TTL │ Redis) · audit · analytics
+LLM (local │ HF Inference │ Bedrock) · Embedder (hashing │ MiniLM │ Titan)
 ```
 
-Deep dive: `docs/architecture.md` · `docs/requirements-traceability.md` · `docs/SUBMISSION.md` (evaluator checklist).
+Deep dive: `docs/architecture.md` · `docs/requirements-traceability.md` · `docs/SUBMISSION.md` (evaluator checklist) · diagrams: `docs/diagrams/agent-graph.mmd` · `system-architecture.mmd` · `user-flow.mmd`.
 
 ## Technology stack
 
-Python · LangGraph · FastAPI · Pydantic · SQLite (checkpointer + store) · BM25 + hashing-vector hybrid retrieval · Angular 21 + Tailwind · Streamlit · pytest + ruff · Mangum/Bedrock/Entra/Genesys/OpenText adapter boundaries (config-swapped).
+Python 3.11+ · LangGraph · FastAPI · Pydantic · SQLite + DynamoDB · local TTL + Redis cache · BM25 + vector hybrid retrieval · Hugging Face Inference Providers (LLM + embeddings) · Supabase Auth · Angular 21 + Tailwind · Streamlit · pytest + ruff (+ fakeredis/moto) · Bedrock/Entra/Genesys/OpenText adapter boundaries (config-swapped).
 
-## Setup
+## Installation
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"     # runtime + dev deps (pinned in pyproject.toml)
 cp .env.example .env                  # then edit if needed (defaults work)
-.venv/bin/python scripts/seed_db.py   # demo employees + tickets
+.venv/bin/python scripts/seed_db.py   # demo employees + tickets + knowledge corpus
+```
+
+Optional extras:
+
+```bash
+.venv/bin/pip install -e ".[cloud]"   # redis + boto3 — real Redis cache / DynamoDB store
+```
+
+**Hugging Face** (real LLM + semantic embeddings, free tier):
+
+```bash
+# .env
+REGINTEL_LLM_PROVIDER=hf
+REGINTEL_HF_TOKEN=hf_...              # from huggingface.co/settings/tokens
+REGINTEL_EMBEDDER=hf
+# then reseed so chunks get MiniLM vectors:
+rm data/regintel.db* && .venv/bin/python scripts/seed_db.py
+```
+
+**Supabase Auth** (real accounts — replaces the demo dropdown):
+
+1. Create a project at supabase.com → copy URL + publishable/secret keys (Settings → API Keys)
+2. Run `db/supabase_profiles.sql` in its SQL editor (profiles table + RLS)
+3. Set in `.env`: `REGINTEL_AUTH_MODE=supabase`, `REGINTEL_SUPABASE_URL`, `REGINTEL_SUPABASE_PUBLISHABLE_KEY`, `REGINTEL_SUPABASE_SECRET_KEY`
+4. Sign up in the UI → grab the user UUID (Authentication → Users) → link it to an employee:
+   `.venv/bin/python scripts/supabase_link_user.py <auth-user-uuid> e999`
+
+**JWT auth** (crypto validation without Supabase):
+
+```bash
+REGINTEL_AUTH_MODE=jwt REGINTEL_JWT_SECRET=dev-secret-... .venv/bin/uvicorn app.main:app --port 8000
+.venv/bin/python scripts/mint_dev_token.py --sub e001   # prints a 24h dev token
 ```
 
 ## Run (two terminals)
@@ -82,17 +132,56 @@ cd ui/web && npm install && npx ng serve
 
 Open http://localhost:4200 — chat with streaming + citations + feedback + language selector + voice input (🎤) and read-aloud (🔊), `/analytics` for the admin dashboard (sign in as e999).
 
+## User flow
+
+```mermaid
+flowchart TD
+    U([User opens app]) --> MODE{"Auth mode?<br/><i>/health → auth_mode</i>"}
+    MODE -->|"stub · demo"| PICK["Pick employee + use case"]
+    MODE -->|"jwt"| TOK["Paste bearer token"]
+    MODE -->|"supabase"| AUTHUI{"Has account?"}
+    AUTHUI -->|"sign in"| SIGNIN["Email + password"]
+    AUTHUI -->|"new"| SIGNUP["Sign up → pending profile"]
+    AUTHUI -->|"forgot"| FORGOT["Email → reset link"]
+    FORGOT --> SIGNIN
+    SIGNUP -.->|"admin assigns employee"| APPROVED
+    SIGNIN --> APPROVED{"Approved?"}
+    APPROVED -->|"no"| BLOCKED["Pending approval — API 401s"]
+    APPROVED -->|"yes"| CHAT
+    PICK --> CHAT
+    TOK --> CHAT
+    CHAT["New conversation"] --> MSG["User types message"] --> CLS{"Intent"}
+    CLS -->|"question / issue"| KA["Grounded answer + citations + 👍/👎"]
+    CLS -->|"show my tickets"| TL["Real TCK list"]
+    CLS -->|"create a ticket"| MISS{"Fields complete?"}
+    MISS -->|"missing"| ASK["Ask for exact fields"] --> MSG
+    MISS -->|"complete"| CONFIRM["Confirm? (yes/no)"]
+    CONFIRM -->|"yes"| DEDUP{"Open ticket same category?"}
+    DEDUP -->|"yes"| REUSE["Reuse existing — no duplicate"]
+    DEDUP -->|"no"| CREATE["TCK-#### created"]
+    CONFIRM -->|"no"| CANCEL["Cancelled — nothing written"]
+    CLS -->|"gibberish"| HONEST["No evidence — won't guess"]
+    style CONFIRM fill:#f96,stroke:#333
+    style DEDUP fill:#fc3,stroke:#333
+    style BLOCKED fill:#e77,stroke:#333
+    style HONEST fill:#cef,stroke:#333
+```
+
+Full-resolution version with every edge (CRM, employee-ID guard, offer chaining): [`docs/diagrams/user-flow.mmd`](docs/diagrams/user-flow.mmd).
+
 ## Environment variables
 
 All optional — defaults run the full demo. Key ones (full list: `.env.example`):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `REGINTEL_AUTH_MODE` | `stub` | `stub` = demo employee header; `jwt` = real JWT/JWKS validation |
+| `REGINTEL_AUTH_MODE` | `stub` | `stub` = demo employee header; `jwt` = JWT/JWKS validation; `supabase` = Supabase Auth |
+| `REGINTEL_SUPABASE_URL` / `REGINTEL_SUPABASE_PUBLISHABLE_KEY` / `REGINTEL_SUPABASE_SECRET_KEY` | — | Supabase project URL + keys (auth mode `supabase`) |
 | `REGINTEL_LLM_PROVIDER` | `local` | `hf` = Hugging Face Inference Providers (Llama-3.1-8B); `bedrock` = Converse API. Both self-degrade to local without credentials |
 | `REGINTEL_HF_TOKEN` / `REGINTEL_HF_MODEL` | — / `Llama-3.1-8B` | HF access token + instruct model for the `hf` provider |
 | `REGINTEL_EMBEDDER` | `local` (hashing) | `hf` = real semantic embeddings via `all-MiniLM-L6-v2` (HF Inference API) |
-| `REGINTEL_STORE_BACKEND` / `REGINTEL_CACHE_BACKEND` | `sqlite` / `local` | `dynamodb` / `redis` enterprise boundaries |
+| `REGINTEL_STORE_BACKEND` / `REGINTEL_CACHE_BACKEND` | `sqlite` / `local` | `dynamodb` / `redis` real cloud backends (need `.[cloud]` extra + credentials) |
+| `REGINTEL_DYNAMO_ENDPOINT` / `REGINTEL_REDIS_URL` | AWS / local | override for local DynamoDB / Redis location |
 | `REGINTEL_JWT_SECRET` / `REGINTEL_JWT_JWKS_URL` | — | HS256 dev secret / Entra JWKS endpoint |
 | `REGINTEL_DB_PATH` / `REGINTEL_SEED_DIR` / `REGINTEL_KNOWLEDGE_DIR` | `data/…` | storage locations |
 | `REGINTEL_GUARDRAIL_ID` | — | Bedrock ApplyGuardrail merged with local checks |
@@ -133,13 +222,13 @@ app/
   agent/      AgentRunner protocol, LangGraphRunner + graph (all §9 nodes)
   config/     UseCaseLoader — versioned YAML use-case config (DynamoDB boundary)
   guardrails/ input/output checks + Bedrock ApplyGuardrail boundary
-  identity/   IdentityProvider protocol + stub + JWT (HS256 dev / Entra JWKS)
+  identity/   IdentityProvider protocol + stub + JWT (HS256 dev / Entra JWKS) + Supabase
   ingestion/  SourceAdapter (local files live, OpenText/Graph skeletons) + pipeline
-  llm/        ChatModel protocol + local model + BedrockChatModel
+  llm/        ChatModel protocol + local + HFChatModel + BedrockChatModel
   retrieval/  BM25 + hashing-vector hybrid (RRF) + reranker (OpenSearch/Bedrock swap)
   schemas/    Pydantic contracts: Message, Conversation, Citation, AgentState,
               ToolResult, UseCaseConfig, StreamEvent
-  stores/     SQLiteStore + DynamoDBStore skeleton; audit_log, chunks, jobs
+  stores/     SQLiteStore + DynamoDBStore (4 tables + GSIs); audit_log, chunks, jobs
   tools/      knowledge_search, ticket_lookup, ticket_create, crm_lookup,
               crm_case_create behind ToolContext
   crm/        CRMAdapter interface + LocalCRMAdapter (JSON seed, write-through)
@@ -168,10 +257,15 @@ docs/         knowledge base + phase plans
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /` | Service metadata (name, version, auth mode, doc links) |
 | `GET /health`, `GET /ready` | Liveness / readiness probes |
+| `POST /v1/auth/signup` · `/signin` · `/forgot-password` · `/signout` | Account lifecycle (auth mode `supabase`) |
+| `GET /v1/auth/me` | Resolved caller identity (employee + roles) |
+| `GET /v1/auth/pending` · `POST /v1/auth/assign-employee` | Admin: list pending signups, link profile → employee (`admin` role) |
 | `POST /v1/conversations` | Create conversation (body: `{usecase_id?, title?}`) |
 | `GET /v1/conversations` | List caller's conversations |
 | `GET /v1/conversations/{id}` | Load conversation + messages (owner only) |
+| `GET /v1/conversations/{id}/export` | Owner-scoped transcript (markdown/JSON) with citations |
 | `POST /v1/conversations/{id}/messages:stream` | Send message → NDJSON event stream (`status`, `token`, `citation`, `usage`, `complete`, `error`) |
 | `PATCH /v1/conversations/{id}` | Rename (`title`) or archive (`status`) a conversation |
 | `POST /v1/messages/{id}/feedback` | Thumbs rating + reason + comment, linked to message/conversation |
@@ -182,16 +276,29 @@ docs/         knowledge base + phase plans
 | `GET /v1/admin/usecases` / `/{id}` | Department-owner self-service: config, tools, guardrails, indexed docs, usage (`admin` role) |
 | `POST /v1/admin/knowledge` | Upload a markdown doc w/ front-matter → validated → ingested (`admin` role) |
 
-Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`.
+Demo identity via `X-Demo-Employee: e001|e002|e003|e999` header in stub mode (`e999` carries the `admin` role). With `REGINTEL_AUTH_MODE=jwt`, every request needs a Bearer JWT validated for signature/issuer/audience/expiry — mint a dev token via `scripts/mint_dev_token.py` (requires `REGINTEL_JWT_SECRET`); Entra JWKS validation plugs in via `REGINTEL_JWT_JWKS_URL`. With `supabase`, sign up/sign in in the UI; access is granted only after an admin links the pending profile to an employee record.
 
-## Notes / limitations (Phase 8)
+## Technical debt / known limitations
+
+- **Default LLM is deterministic-local** — grounded answers are composed extractively from retrieved chunks, not generated prose. `REGINTEL_LLM_PROVIDER=hf` (or `bedrock`) flips to a real model; safety-critical text (confirm/clarify/refuse) stays template-based either way.
+- **Default embeddings are hashing-based** — no semantic similarity until `REGINTEL_EMBEDDER=hf` is set; requires a reseed (existing chunks keep their vector space).
+- **SQLite on Render's free tier is ephemeral** — the DB re-ingests on each cold boot (fine for demos); production should set `REGINTEL_STORE_BACKEND=dynamodb` (implemented, moto-tested) or a managed Postgres.
+- **Deployed demo runs `stub` auth** — deliberate, so evaluators can click through; `jwt`/`supabase` are env flips documented in `docs/deployment.md`.
+- **Supabase approval is admin-driven** — new signups sit pending until an admin runs `assign-employee` (or the bootstrap script); no self-service access.
+- **Free-tier cold starts** — Render API sleeps ~15 min idle; HF inference adds ~15–30s on first call per model. Warm `/health` before demoing.
+- **Ingestion sources** — only `local_files` is live; OpenText/MS Graph adapters are fail-closed skeletons by design (config-swappable).
+- **Speech** — browser Web Speech only; AWS Transcribe/Polly boundary exists but is unwired.
+- **Genesys** — the agent-assist endpoint is live and stateless; real Genesys org provisioning is pending (OQ-01).
+- **Admin bootstrap** — first admin must be linked via `scripts/supabase_link_user.py`; no UI for the initial grant.
+
+## Implementation notes
 
 - LLM is a deterministic local implementation (`app/llm/local.py`) — grounded answers are composed extractively from retrieved chunks. Real providers plug in via `REGINTEL_LLM_PROVIDER=hf` (Hugging Face Inference Providers, needs `REGINTEL_HF_TOKEN`) or `bedrock` (Converse API); both self-degrade to local without credentials.
 - Retrieval is local hybrid: BM25 + deterministic hashing-vector cosine merged via reciprocal-rank fusion, then `LocalReranker` rescoring (`app/retrieval/`). OpenSearch + Bedrock Titan/Cohere swap in via `models.embedding`/`models.rerank` config.
 - Ingestion pipeline (`app/ingestion/`): `SourceAdapter` interface with local-files adapter live and OpenText/Graph skeletons that fail closed; checksum drift detection re-indexes changed docs; per-doc failures land in the `ingestion_failures` dead-letter table.
 - Citations carry the full §10.1 contract: document, section, chunk, excerpt, retrieval + rerank scores, version, source URL/ref, access decision.
-- Auth is a demo header (`X-Demo-Employee`) in stub mode; JWT mode does real crypto validation locally (HS256 dev key) or Entra RS256 via JWKS.
-- Cloud backends are boundaries: `REGINTEL_STORE_BACKEND=dynamodb`, `REGINTEL_CACHE_BACKEND=redis`, `REGINTEL_LLM_PROVIDER=bedrock`, `REGINTEL_GUARDRAIL_ID` all fail closed or degrade to local until credentials exist. `app/lambda_handler.py` provides the Lambda entry point.
+- Auth: demo header (`X-Demo-Employee`) in stub mode; JWT mode does real crypto validation (HS256 dev key / Entra RS256 via JWKS); `supabase` mode proxies GoTrue server-side — signup/signin/forgot-password — with tokens verified via JWKS and profiles resolved to employees through the `profiles` table (admin-assigned).
+- Cloud backends are live, not stubs: `REGINTEL_STORE_BACKEND=dynamodb` (full 36-method store, moto-tested), `REGINTEL_CACHE_BACKEND=redis` (JSON values, TTL, SCAN invalidation, local fallback), `REGINTEL_LLM_PROVIDER=hf`/`bedrock`, `REGINTEL_GUARDRAIL_ID`. All degrade to local without credentials. `app/lambda_handler.py` provides the Lambda entry point.
 - Security-relevant actions write to the `audit_log` table (actor, action, outcome, config context).
 - Angular app (`ui/web/`) is the end-user surface; Entra MSAL login swaps in once the app registration exists (bearer-token input today). Multilingual selection is recorded and routed to the model boundary — the local model discloses English-only.
 - Multi-turn state persists in the SQLite checkpointer; per-employee ticket scoping is enforced server-side.
