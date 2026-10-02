@@ -37,6 +37,12 @@ def _send_turn(client, conversation_id: str, content: str, employee: str) -> dic
         json={"content": content},
         headers={"X-Demo-Employee": employee},
     ) as resp:
+        if resp.status_code != 200:
+            return {
+                "nodes": [],
+                "answer": f"[api error {resp.status_code}] {resp.read().decode('utf-8', 'replace')[:200]}",
+                "citations": [],
+            }
         events = [json.loads(line) for line in resp.iter_lines() if line]
     nodes = [e["data"]["detail"] for e in events if e["type"] == "status" and e["data"]["stage"] == "node"]
     answer = "".join(e["data"]["text"] for e in events if e["type"] == "token")
@@ -50,6 +56,12 @@ def run_case(client, case: dict) -> CaseResult:
     resp = client.post(
         "/v1/conversations", json={"usecase_id": usecase}, headers={"X-Demo-Employee": employee}
     )
+    if resp.status_code != 201:
+        return CaseResult(
+            case_id=case["id"],
+            passed=False,
+            failures=[f"conversation create failed: HTTP {resp.status_code} {resp.text[:160]}"],
+        )
     conv_id = resp.json()["conversation_id"]
 
     result = CaseResult(case_id=case["id"], passed=True)

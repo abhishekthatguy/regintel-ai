@@ -25,11 +25,20 @@ st.caption(
 
 if st.button("Run golden suite", type="primary"):
     with httpx.Client(base_url=API_BASE, timeout=60) as client:
+        token = st.session_state.get("bearer_token", "").strip()
+        if token:
+            client.headers["Authorization"] = f"Bearer {token}"
         try:
             client.get("/ready").raise_for_status()
         except Exception:
             st.error(f"API not reachable at {API_BASE}")
             st.stop()
+        auth_mode = client.get("/health").json().get("auth_mode", "stub")
+        if auth_mode != "stub" and not token:
+            st.warning(
+                f"API runs auth_mode={auth_mode} — paste a token on the main "
+                "page first, or cases will all fail with 401."
+            )
         progress = st.progress(0.0, text="Running cases…")
         results = run_all(client)
         progress.progress(1.0, text="Done")
