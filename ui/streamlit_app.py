@@ -151,6 +151,18 @@ with st.sidebar:
             )
     usecase_label = st.selectbox("Use case", list(USECASES))
     usecase_id = USECASES[usecase_label]
+
+    # Switching employee or use case mid-chat must reset the session —
+    # conversations are owned per-employee, so reusing the old id 403s.
+    if st.session_state.get("active_employee") != employee_id or st.session_state.get(
+        "active_usecase"
+    ) != usecase_id:
+        st.session_state.active_employee = employee_id
+        st.session_state.active_usecase = usecase_id
+        st.session_state.pop("conversation_id", None)
+        st.session_state.pop("messages", None)
+        st.rerun()
+
     if st.button("New conversation"):
         st.session_state.pop("conversation_id", None)
         st.session_state.pop("messages", None)
@@ -271,7 +283,12 @@ if prompt := st.chat_input("Ask something…"):
                     raw = json.loads(raw).get("detail", raw)
                 except Exception:
                     pass
-                st.error(f"API error {stream.status_code}: {raw}")
+                st.session_state.pop("conversation_id", None)
+                st.session_state.pop("messages", None)
+                st.error(
+                    f"API error {stream.status_code}: {raw} — "
+                    "session cleared; send your message again."
+                )
                 st.stop()
             for line in stream.iter_lines():
                 if not line:
