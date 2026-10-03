@@ -41,12 +41,13 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | LangGraph agent, tools, citations, writes+confirm+dedupe | ✅ Live locally + on the public demo |
 | Hugging Face provider (Llama-3.1-8B + MiniLM embeddings) | ✅ Connected locally — real token in `.env.local`, verified end-to-end |
 | Public demo (Streamlit Cloud + Render) | ✅ Live — intentionally `stub` auth + local model so evaluators click through |
-| Supabase Auth (signup/signin/forgot, admin-assigns) | ⚙️ Implemented + tested — **pending**: dedicated project, `db/supabase_profiles.sql`, env vars, first admin link |
+| Supabase Auth (signup/signin/forgot, admin-assigns) | ⚙️ Verified end-to-end on a live project — profiles table + RLS migrated, GoTrue signup/signin/token issue proven, ES256 JWKS served. **Pending**: `sb_secret_` key from the dashboard for runtime profile writes (enable `REGINTEL_AUTH_MODE=supabase` after setting it) |
 | JWT auth mode | ✅ Verified locally (401 forged / 200 valid) — off on demo by design |
-| DynamoDB store / Redis cache | ✅ Implemented + tested (moto/fakeredis) — **pending**: point at live AWS/Redis via env |
+| DynamoDB store | ✅ **Live on DynamoDB Local** (docker :8002) — tickets/messages/feedback/jobs land in real tables; verified via API + boto3 scans. AWS RDS creds to go cloud |
+| Redis cache | ✅ **Live on local redis-server** (:6379) — `kb:*` keys with 300s TTL, tamper-test proved Redis reads, 0.246s miss / 0.001s hit. `REGINTEL_REDIS_URL` swap for managed |
 | Bedrock LLM/embeddings/guardrail | 🔌 Adapter boundary implemented — **pending**: AWS account + model IDs |
 | Genesys agent-assist / OpenText ingestion | 🔌 Boundary only — endpoint + adapters exist, real integrations deferred (OQ-01/OQ-02) |
-| Angular UI (`ui/web`) | ✅ Runs locally — intentionally not deployed |
+| Angular UI (`ui/web`) | ✅ Builds clean + serves on :4200 — CORS verified against the API; intentionally not deployed |
 | `scripts/hf_refresh_token.py` | ✅ OAuth fallback for HF inference — superseded by the permanent API token |
 
 Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough ·

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     # Backend selection — enterprise implementations swap in via config.
     store_backend: str = "sqlite"  # "dynamodb" -> DynamoDBStore (needs AWS cfg)
+    dynamo_endpoint: str = ""  # custom endpoint, e.g. DynamoDB Local container
+    dynamo_prefix: str = "regintel"  # table name prefix
     cache_backend: str = "local"  # "redis" -> RedisCache (needs redis_url)
     redis_url: str = ""
     cache_ttl_seconds: int = 300

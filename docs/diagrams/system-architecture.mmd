@@ -14,7 +14,7 @@ flowchart LR
         subgraph Provider["Identity providers"]
             STUB["stub<br/><i>X-Demo-Employee</i>"]
             JWTP["jwt<br/><i>HS256 / Entra JWKS</i>"]
-            SB["supabase<br/><i>JWKS + profiles table<br/>(admin-assigns) · pending live project</i>"]
+            SB["supabase<br/><i>JWKS + profiles migrated<br/>· pending sb_secret key</i>"]
         end
         AUTH --> STUB & JWTP & SB
     end
@@ -46,11 +46,11 @@ flowchart LR
         EMB --> HASH & HFE & BRE
         STORE{"Store<br/><i>REGINTEL_STORE_BACKEND</i>"}
         SQL["SQLite<br/><i>local default · LIVE</i>"]
-        DDB["DynamoDBStore<br/><i>boto3 · moto-tested</i>"]
+        DDB["DynamoDBStore<br/><i>boto3 · LIVE via DynamoDB Local</i>"]
         STORE --> SQL & DDB
         CACHE{"Cache (FR-21)<br/><i>REGINTEL_CACHE_BACKEND</i>"}
-        TTL["LocalTTL<br/><i>LIVE</i>"]
-        RDS["RedisCache<br/><i>redis-py · fakeredis-tested</i>"]
+        TTL["LocalTTL"]
+        RDS["RedisCache<br/><i>redis-py · LIVE local :6379</i>"]
         CACHE --> TTL & RDS
         CRMADP{"CRMAdapter"}
         LCRM["LocalCRM<br/><i>seed JSON · LIVE</i>"]

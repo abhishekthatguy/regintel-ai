@@ -37,10 +37,17 @@ def _store_for(db_path: str, backend: str = "sqlite"):
     if backend == "dynamodb":
         from app.stores.dynamodb import DynamoDBStore
 
+        settings = get_settings()
+        # boto3 signs requests from process env; when a custom endpoint is
+        # configured (DynamoDB Local) creds are a formality, so seed dummies.
+        if settings.dynamo_endpoint:
+            os.environ.setdefault("AWS_ACCESS_KEY_ID", "local")
+            os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "local")
+            os.environ.setdefault("AWS_REGION", "us-east-1")
         store = DynamoDBStore(
-            table_prefix=os.getenv("REGINTEL_DYNAMO_PREFIX", "regintel"),
+            table_prefix=settings.dynamo_prefix,
             region=os.getenv("AWS_REGION", ""),
-            endpoint_url=os.getenv("REGINTEL_DYNAMO_ENDPOINT") or None,
+            endpoint_url=settings.dynamo_endpoint or None,
         )
     else:
         store = SQLiteStore(db_path)
@@ -60,10 +67,12 @@ RUNNERS: list[LangGraphRunner] = []
 
 
 @lru_cache
-def _runner_for(db_path: str, knowledge_dir: str, seed_dir: str) -> LangGraphRunner:
+def _runner_for(
+    db_path: str, knowledge_dir: str, seed_dir: str, store_backend: str = "sqlite"
+) -> LangGraphRunner:
     from app.crm.local import LocalCRMAdapter
 
-    store = _store_for(db_path)
+    store = _store_for(db_path, store_backend)
     ensure_ingested(store, Path(knowledge_dir))
     crm = LocalCRMAdapter(Path(seed_dir) / "crm_cases.json")
     settings = get_settings()
@@ -96,7 +105,10 @@ def get_usecase_loader(settings: Annotated[Settings, Depends(get_settings)]) -> 
 
 def get_agent_runner(settings: Annotated[Settings, Depends(get_settings)]) -> AgentRunner:
     return _runner_for(
-        str(settings.db_path), str(settings.knowledge_dir), str(settings.seed_dir)
+        str(settings.db_path),
+        str(settings.knowledge_dir),
+        str(settings.seed_dir),
+        settings.store_backend,
     )
 
 

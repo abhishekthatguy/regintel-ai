@@ -99,13 +99,17 @@ HF provider connected end-to-end on the local instance:
 
 ## Still pending (operator actions)
 
-- **Supabase live project** — create dedicated project, run
-  `db/supabase_profiles.sql`, set `REGINTEL_SUPABASE_*` env vars, link
-  first admin via `scripts/supabase_link_user.py` (deployment.md §5).
-- **Real Redis / DynamoDB endpoints** — adapters are implemented and
-  CI-tested (fakeredis/moto); pointing at live services is env-only.
-- **Bedrock credentials** — `REGINTEL_LLM_PROVIDER=bedrock` +
-  `AWS_REGION`/profile when an AWS account is provisioned.
+- **Supabase secret key** — `profiles` table + RLS migrated on project
+  `qqaaudputjojpglkpbzj`; GoTrue signup/signin/token verified with the
+  publishable key, ES256 JWKS served. The only remaining step is pasting
+  `REGINTEL_SUPABASE_SECRET_KEY` (dashboard → Settings → API Keys) and
+  enabling `REGINTEL_AUTH_MODE=supabase` — profile writes are the only
+  ops that need the secret key.
+- **Real AWS credentials** — DynamoDB Local is live via
+  `REGINTEL_DYNAMO_ENDPOINT`; swap `AWS_REGION` + real creds to go
+  cloud. Same for `REGINTEL_LLM_PROVIDER=bedrock`.
+- **Managed Redis** — local redis-server is live; point
+  `REGINTEL_REDIS_URL` at ElastiCache/Upstash/Render KV for prod.
 - **Enterprise integrations** — Genesys Cloud OAuth client + OpenText
   source adapter are boundaries pending org access (OQ-01/OQ-02).
 
