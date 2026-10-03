@@ -14,7 +14,7 @@ flowchart LR
         subgraph Provider["Identity providers"]
             STUB["stub<br/><i>X-Demo-Employee</i>"]
             JWTP["jwt<br/><i>HS256 / Entra JWKS</i>"]
-            SB["supabase<br/><i>JWKS + profiles table<br/>(admin-assigns)</i>"]
+            SB["supabase<br/><i>JWKS + profiles table<br/>(admin-assigns) · pending live project</i>"]
         end
         AUTH --> STUB & JWTP & SB
     end
@@ -22,10 +22,10 @@ flowchart LR
     subgraph Agent["LangGraphRunner"]
         GRAPH["agent graph<br/><i>see agent-graph.mmd</i>"]
         CKPT["AsyncSqliteSaver<br/><i>conversation state</i>"]
-        LLM{"ChatModel<br/>factory"}
+        LLM{"ChatModel<br/>factory<br/><i>REGINTEL_LLM_PROVIDER</i>"}
         LOC["local deterministic<br/><i>always-on fallback</i>"]
-        HF["HFChatModel<br/><i>Llama-3.1-8B · hf provider</i>"]
-        BR["BedrockChatModel<br/><i>Converse API</i>"]
+        HF["HFChatModel<br/><i>Llama-3.1-8B · LIVE</i>"]
+        BR["BedrockChatModel<br/><i>Converse API · boundary</i>"]
         LLM --> LOC & HF & BR
         CKPT -.-> GRAPH
         LLM -.-> GRAPH
@@ -39,22 +39,22 @@ flowchart LR
 
     subgraph Data["Data & retrieval"]
         HYB["HybridRetriever<br/>BM25 + vector RRF"]
-        EMB{"Embedder"}
+        EMB{"Embedder<br/><i>REGINTEL_EMBEDDER</i>"}
         HASH["hashing (offline)"]
-        HFE["HFEmbedder<br/><i>MiniLM-L6-v2</i>"]
-        BRE["Bedrock Titan"]
+        HFE["HFEmbedder<br/><i>MiniLM-L6-v2 · LIVE</i>"]
+        BRE["Bedrock Titan<br/><i>boundary</i>"]
         EMB --> HASH & HFE & BRE
-        STORE{"Store"}
-        SQL["SQLite<br/><i>local default</i>"]
-        DDB["DynamoDBStore<br/><i>boto3 · 4 tables</i>"]
+        STORE{"Store<br/><i>REGINTEL_STORE_BACKEND</i>"}
+        SQL["SQLite<br/><i>local default · LIVE</i>"]
+        DDB["DynamoDBStore<br/><i>boto3 · moto-tested</i>"]
         STORE --> SQL & DDB
-        CACHE{"Cache (FR-21)"}
-        TTL["LocalTTL"]
-        RDS["RedisCache<br/><i>redis-py</i>"]
+        CACHE{"Cache (FR-21)<br/><i>REGINTEL_CACHE_BACKEND</i>"}
+        TTL["LocalTTL<br/><i>LIVE</i>"]
+        RDS["RedisCache<br/><i>redis-py · fakeredis-tested</i>"]
         CACHE --> TTL & RDS
         CRMADP{"CRMAdapter"}
-        LCRM["LocalCRM<br/><i>seed JSON</i>"]
-        XCRM["enterprise CRM<br/><i>HTTP adapter</i>"]
+        LCRM["LocalCRM<br/><i>seed JSON · LIVE</i>"]
+        XCRM["enterprise CRM<br/><i>HTTP adapter · boundary</i>"]
         CRMADP --> LCRM & XCRM
     end
 

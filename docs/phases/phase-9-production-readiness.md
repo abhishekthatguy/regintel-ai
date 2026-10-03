@@ -9,11 +9,11 @@ strengthen distributed persistence/cache beyond SQLite/local backends."
 
 | Item | Reviewer gap | Status |
 |---|---|---|
-| 9.1 Hugging Face provider | skeleton model boundaries → real LLM + embeddings | ✅ implemented |
+| 9.1 Hugging Face provider | skeleton model boundaries → real LLM + embeddings | ✅ implemented + **connected live** |
 | 9.2 Redis cache | `RedisCache` raised on use → real client | ✅ implemented |
 | 9.3 DynamoDB store | `DynamoDBStore` raised on use → real boto3 impl | ✅ implemented |
-| 9.4 Deployed auth | stub header → real Supabase Auth (signup/signin/forgot) + JWT mode | ✅ implemented |
-| 9.5 HF MCP server | agent tooling for HF Hub (spaces/models/datasets) | config added |
+| 9.4 Deployed auth | stub header → real Supabase Auth (signup/signin/forgot) + JWT mode | ✅ implemented — live Supabase project pending |
+| 9.5 HF MCP server | agent tooling for HF Hub (spaces/models/datasets) | ✅ connected (OAuth) |
 
 ## Delivered
 
@@ -79,6 +79,35 @@ HF's official MCP endpoint (`https://huggingface.co/mcp`) added at
 project scope — OAuth via `devin mcp login huggingface`. Agent tooling
 for model/space/dataset lookup during development; not part of the
 runtime.
+
+## Live verification (2026-10-03)
+
+HF provider connected end-to-end on the local instance:
+
+- `Settings` now loads `.env.local` after `.env` — gitignored local
+  secrets (`REGINTEL_HF_TOKEN`) are honoured without touching `.env`.
+- Permanent HF API token configured (Inference Providers scope);
+  `whoami`/`chat.completions`/feature-extraction all verified 200.
+- Corpus re-ingested with real 384-dim MiniLM embeddings (93 chunks);
+  paraphrase queries ("vacation policy" → Leave and Time-Off Policy)
+  retrieve semantically, and answers are LLM-composed grounded prose.
+- Greeting/capability intents ("how can you help me", "what can you do")
+  are deterministic on the HF path — classified locally before the LLM
+  call so they can never flip to knowledge retrieval.
+- `scripts/hf_refresh_token.py` kept as an OAuth-token fallback helper;
+  not needed while the permanent API token is set.
+
+## Still pending (operator actions)
+
+- **Supabase live project** — create dedicated project, run
+  `db/supabase_profiles.sql`, set `REGINTEL_SUPABASE_*` env vars, link
+  first admin via `scripts/supabase_link_user.py` (deployment.md §5).
+- **Real Redis / DynamoDB endpoints** — adapters are implemented and
+  CI-tested (fakeredis/moto); pointing at live services is env-only.
+- **Bedrock credentials** — `REGINTEL_LLM_PROVIDER=bedrock` +
+  `AWS_REGION`/profile when an AWS account is provisioned.
+- **Enterprise integrations** — Genesys Cloud OAuth client + OpenText
+  source adapter are boundaries pending org access (OQ-01/OQ-02).
 
 ## Verification
 

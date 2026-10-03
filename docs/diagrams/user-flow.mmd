@@ -2,7 +2,7 @@
 flowchart TD
     U([User opens app]) --> MODE{"Auth mode?<br/><i>/health → auth_mode</i>"}
 
-    MODE -->|"stub · demo"| PICK["Pick employee + use case<br/><i>sidebar dropdowns</i>"]
+    MODE -->|"stub · demo"| PICK["Pick employee + use case<br/><i>sidebar dropdowns — switching<br/>mid-chat resets the session</i>"]
     MODE -->|"jwt"| TOK["Paste bearer token"]
     MODE -->|"supabase"| AUTHUI{"Has account?"}
 
@@ -21,10 +21,12 @@ flowchart TD
     CHAT["💬 New conversation<br/>select use case"] --> MSG["User types a message"]
 
     MSG --> CLS{"Intent"}
+    CLS -->|"greeting / 'how can you help'"| GREET["Deterministic capability<br/>answer — never retrieves"]
+    GREET --> MSG
     CLS -->|"question / issue"| KA["Grounded answer<br/>+ citation cards c1..c3<br/>+ 👍/👎 feedback"]
     KA --> OFFER{"Offer at end"}
     OFFER -->|"user: yes"| NEXTOFFER["Run offered action<br/><i>check tickets → then offer create</i>"]
-    OFFER -->|"user: no"| IDLE1(["Done — context reset"])
+    OFFER -->|"user: no"| IDLE1(["Done — awaits next message"])
     NEXTOFFER --> MSG
 
     CLS -->|"show my tickets"| TL["List real tickets<br/><i>TCK-#### only — never invented</i><br/>+ offer: create new?"]
@@ -36,7 +38,7 @@ flowchart TD
     CONFIRM -->|"yes"| DEDUP{"Open ticket<br/>same category?"}
     DEDUP -->|"yes"| REUSE["Reuse existing ticket<br/><i>no duplicate written</i>"]
     DEDUP -->|"no"| CREATE["TCK-#### created"]
-    CONFIRM -->|"no"| CANCEL["Cancelled — nothing written"]
+    CONFIRM -->|"no / no thanks"| CANCEL["'Cancelled the ticket creation —<br/>nothing written. Anything else?'<br/><i>fields kept — ask again resumes</i>"]
     REUSE & CREATE & CANCEL --> IDLE1
 
     CLS -->|"employee id typed<br/>EMP1024"| GUARD["Profile acknowledged —<br/>identity never switched<br/>+ offer: check tickets"]

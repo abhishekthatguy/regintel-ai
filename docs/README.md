@@ -32,7 +32,22 @@ Each phase is a **fully functional end-to-end increment**: after every phase the
 | [6](phases/phase-6-pilot-readiness.md) | Pilot Readiness ✅ (local slice) | CRM writes w/ full safety contract, dept cost attribution + funnel + unmet-need clustering, dept-owner self-service views |
 | [7](phases/phase-7-hardening.md) | Hardening & Handoff ✅ (local slice) | Self-service knowledge upload, P95 latency evidence, CRM/finance eval coverage, OpenAPI export + demo script |
 | [8](phases/phase-8-quality-completeness.md) | Quality & Completeness ✅ (local slice) | Bedrock protocol parity, FR-16 query rewriting, conversation export, rubric scoring, real cost pricing, CI gate |
-| [9](phases/phase-9-production-readiness.md) | Production Readiness ✅ | HF LLM + semantic embeddings, real Redis cache, real DynamoDB store (moto-tested), JWT on Render, HF MCP |
+| [9](phases/phase-9-production-readiness.md) | Production Readiness ✅ (core live) | HF LLM + semantic embeddings **connected & verified**, real Redis cache, real DynamoDB store (moto-tested), Supabase/JWT auth, HF MCP |
+
+## Current status (what's live vs pending)
+
+| Area | Status |
+|---|---|
+| LangGraph agent, tools, citations, writes+confirm+dedupe | ✅ Live locally + on the public demo |
+| Hugging Face provider (Llama-3.1-8B + MiniLM embeddings) | ✅ Connected locally — real token in `.env.local`, verified end-to-end |
+| Public demo (Streamlit Cloud + Render) | ✅ Live — intentionally `stub` auth + local model so evaluators click through |
+| Supabase Auth (signup/signin/forgot, admin-assigns) | ⚙️ Implemented + tested — **pending**: dedicated project, `db/supabase_profiles.sql`, env vars, first admin link |
+| JWT auth mode | ✅ Verified locally (401 forged / 200 valid) — off on demo by design |
+| DynamoDB store / Redis cache | ✅ Implemented + tested (moto/fakeredis) — **pending**: point at live AWS/Redis via env |
+| Bedrock LLM/embeddings/guardrail | 🔌 Adapter boundary implemented — **pending**: AWS account + model IDs |
+| Genesys agent-assist / OpenText ingestion | 🔌 Boundary only — endpoint + adapters exist, real integrations deferred (OQ-01/OQ-02) |
+| Angular UI (`ui/web`) | ✅ Runs locally — intentionally not deployed |
+| `scripts/hf_refresh_token.py` | ✅ OAuth fallback for HF inference — superseded by the permanent API token |
 
 Also: [demo-script.md](demo-script.md) — repeatable evaluator walkthrough ·
 [e2e-test-checklist.md](e2e-test-checklist.md) — manual question→expected-answer matrix for all three use cases ·
