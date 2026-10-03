@@ -22,7 +22,9 @@ Sign in by picking a demo employee in the sidebar (`e001` IT · `e002` HR · `e0
 
 ## Status
 
-**Phase 9 — Production Readiness.** Phase 8 delivered the full local slice; Phase 9 turns the adapter skeletons into working cloud backends: Hugging Face LLM + semantic embeddings, real Redis cache, real DynamoDB store, and Supabase Auth (signup/signin/forgot-password + admin approval) alongside JWT/JWKS. Everything still degrades to local stubs, so the demo runs credential-free.
+**Phase 9 — Production Readiness.** Phase 8 delivered the full local slice; Phase 9 turns the adapter skeletons into working cloud backends: Hugging Face LLM + semantic embeddings (**connected and verified live**), real Redis cache, real DynamoDB store, and Supabase Auth (signup/signin/forgot-password + admin approval) alongside JWT/JWKS. Everything still degrades to local stubs, so the demo runs credential-free.
+
+Recent hardening: conversational cancellation (names the action, keeps context for resume), sidebar session reset on employee/use-case switch, deterministic greeting/capability intents on the HF path, polite declines ("no thanks"), and eval skip-with-reason handling under JWT/Supabase auth. Live-vs-pending tracker: `docs/README.md`.
 
 ## Features
 
@@ -77,6 +79,7 @@ Python 3.11+ · LangGraph · FastAPI · Pydantic · SQLite + DynamoDB · local T
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"     # runtime + dev deps (pinned in pyproject.toml)
 cp .env.example .env                  # then edit if needed (defaults work)
+cp .env.example .env.local            # gitignored — secrets/overrides live here (loaded after .env)
 .venv/bin/python scripts/seed_db.py   # demo employees + tickets + knowledge corpus
 ```
 
@@ -86,22 +89,24 @@ Optional extras:
 .venv/bin/pip install -e ".[cloud]"   # redis + boto3 — real Redis cache / DynamoDB store
 ```
 
-**Hugging Face** (real LLM + semantic embeddings, free tier):
+**Hugging Face** (real LLM + semantic embeddings, free tier — verified live locally):
 
 ```bash
-# .env
+# .env.local (gitignored — never commit the token)
 REGINTEL_LLM_PROVIDER=hf
-REGINTEL_HF_TOKEN=hf_...              # from huggingface.co/settings/tokens
-REGINTEL_EMBEDDER=hf
+REGINTEL_HF_TOKEN=hf_...              # huggingface.co/settings/tokens — enable "Make calls to Inference Providers"
+REGINTEL_HF_MODEL=meta-llama/Llama-3.1-8B-Instruct
+REGINTEL_EMBEDDER=hf                  # all-MiniLM-L6-v2 semantic retrieval
 # then reseed so chunks get MiniLM vectors:
 rm data/regintel.db* && .venv/bin/python scripts/seed_db.py
+# restart the API afterwards — settings are loaded at process start
 ```
 
 **Supabase Auth** (real accounts — replaces the demo dropdown):
 
 1. Create a project at supabase.com → copy URL + publishable/secret keys (Settings → API Keys)
 2. Run `db/supabase_profiles.sql` in its SQL editor (profiles table + RLS)
-3. Set in `.env`: `REGINTEL_AUTH_MODE=supabase`, `REGINTEL_SUPABASE_URL`, `REGINTEL_SUPABASE_PUBLISHABLE_KEY`, `REGINTEL_SUPABASE_SECRET_KEY`
+3. Set in `.env.local`: `REGINTEL_AUTH_MODE=supabase`, `REGINTEL_SUPABASE_URL`, `REGINTEL_SUPABASE_PUBLISHABLE_KEY`, `REGINTEL_SUPABASE_SECRET_KEY`
 4. Sign up in the UI → grab the user UUID (Authentication → Users) → link it to an employee:
    `.venv/bin/python scripts/supabase_link_user.py <auth-user-uuid> e999`
 
@@ -137,7 +142,7 @@ Open http://localhost:4200 — chat with streaming + citations + feedback + lang
 ```mermaid
 flowchart TD
     U([User opens app]) --> MODE{"Auth mode?<br/><i>/health → auth_mode</i>"}
-    MODE -->|"stub · demo"| PICK["Pick employee + use case"]
+    MODE -->|"stub · demo"| PICK["Pick employee + use case<br/><i>switching resets session</i>"]
     MODE -->|"jwt"| TOK["Paste bearer token"]
     MODE -->|"supabase"| AUTHUI{"Has account?"}
     AUTHUI -->|"sign in"| SIGNIN["Email + password"]
@@ -151,6 +156,8 @@ flowchart TD
     PICK --> CHAT
     TOK --> CHAT
     CHAT["New conversation"] --> MSG["User types message"] --> CLS{"Intent"}
+    CLS -->|"greeting / help"| GREET["Capability answer — never retrieves"]
+    GREET --> MSG
     CLS -->|"question / issue"| KA["Grounded answer + citations + 👍/👎"]
     CLS -->|"show my tickets"| TL["Real TCK list"]
     CLS -->|"create a ticket"| MISS{"Fields complete?"}
@@ -159,7 +166,7 @@ flowchart TD
     CONFIRM -->|"yes"| DEDUP{"Open ticket same category?"}
     DEDUP -->|"yes"| REUSE["Reuse existing — no duplicate"]
     DEDUP -->|"no"| CREATE["TCK-#### created"]
-    CONFIRM -->|"no"| CANCEL["Cancelled — nothing written"]
+    CONFIRM -->|"no / no thanks"| CANCEL["Cancelled — nothing written,<br/>fields kept for resume"]
     CLS -->|"gibberish"| HONEST["No evidence — won't guess"]
     style CONFIRM fill:#f96,stroke:#333
     style DEDUP fill:#fc3,stroke:#333
@@ -248,7 +255,8 @@ data/
   usecases/   versioned use-case configs (it_support, hr_support, finance_support)
   seed/       demo employees + tickets + CRM cases
 eval/         golden_cases.json + rubric runner
-scripts/      seed_db.py, load_test.py (P95 vs NFR targets), export_openapi.py
+scripts/      seed_db.py, load_test.py (P95 vs NFR targets), export_openapi.py,
+              mint_dev_token.py, supabase_link_user.py, hf_refresh_token.py
 tests/
 docs/         knowledge base + phase plans
 ```
