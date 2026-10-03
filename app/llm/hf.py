@@ -169,6 +169,10 @@ class HFChatModel:
                 return INTENT_CONFIRM
             if is_cancellation(message):
                 return INTENT_CANCEL
+        # Greetings / capability questions are deterministic — an LLM label
+        # of "knowledge_query" here would dump random docs into the reply.
+        if self._fallback.classify(message, context) == INTENT_DIRECT:
+            return INTENT_DIRECT
         if not self._client:
             return self._fallback.classify(message, context)
         out = self._chat(

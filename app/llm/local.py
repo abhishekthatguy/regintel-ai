@@ -56,7 +56,8 @@ CRM_CREATE_RE = re.compile(
     re.IGNORECASE,
 )
 DIRECT_RE = re.compile(
-    r"^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks|thank you|bye|help)\b",
+    r"^\s*(hi|hello|hey|good (morning|afternoon|evening)|thanks|thank you|bye|help)\b"
+    r"|^\s*(how|what|who)\s+(can|do|are|could)\s+you\b",
     re.IGNORECASE,
 )
 
