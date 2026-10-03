@@ -28,6 +28,7 @@ class CaseResult:
     nodes_seen: list[str] = field(default_factory=list)
     final_answer: str = ""
     rubric: dict[str, float] = field(default_factory=dict)
+    skipped: bool = False
 
 
 def _send_turn(client, conversation_id: str, content: str, employee: str) -> dict:
@@ -50,8 +51,20 @@ def _send_turn(client, conversation_id: str, content: str, employee: str) -> dic
     return {"nodes": nodes, "answer": answer, "citations": citations}
 
 
-def run_case(client, case: dict) -> CaseResult:
+def run_case(client, case: dict, effective_employee: str | None = None) -> CaseResult:
     employee = case.get("employee", "e001")
+    if effective_employee and employee != effective_employee:
+        return CaseResult(
+            case_id=case["id"],
+            passed=True,
+            skipped=True,
+            failures=[
+                f"skipped — case is scripted for employee '{employee}' but the "
+                f"token resolves to '{effective_employee}'. Under jwt/supabase "
+                "auth the signed token is the identity, so per-case employees "
+                "can't apply; run the suite in stub mode to exercise them."
+            ],
+        )
     usecase = case.get("usecase", "it_support")
     resp = client.post(
         "/v1/conversations", json={"usecase_id": usecase}, headers={"X-Demo-Employee": employee}
@@ -186,23 +199,31 @@ def run_case(client, case: dict) -> CaseResult:
     return result
 
 
-def run_all(client) -> list[CaseResult]:
+def run_all(client, effective_employee: str | None = None) -> list[CaseResult]:
     cases = json.loads(CASES_PATH.read_text())
-    return [run_case(client, c) for c in cases]
+    return [run_case(client, c, effective_employee) for c in cases]
 
 
 def summarize(results: list[CaseResult]) -> dict:
     total = len(results)
-    passed = sum(r.passed for r in results)
+    skipped = sum(1 for r in results if r.skipped)
+    ran = [r for r in results if not r.skipped]
+    passed = sum(r.passed for r in ran)
     dims = ["routing", "groundedness", "citation_quality", "completeness", "safety"]
     rubric_means = {
-        d: round(sum(r.rubric.get(d, 0) for r in results) / total, 2) if total else 0.0
+        d: round(sum(r.rubric.get(d, 0) for r in ran) / len(ran), 2) if ran else 0.0
         for d in dims
     }
     return {
         "total": total,
+        "skipped": skipped,
         "passed": passed,
-        "pass_rate": round(passed / total, 3) if total else 0.0,
+        "pass_rate": round(passed / len(ran), 3) if ran else 0.0,
         "rubric_means": rubric_means,
-        "failed": [{"id": r.case_id, "failures": r.failures} for r in results if not r.passed],
+        "failed": [
+            {"id": r.case_id, "failures": r.failures} for r in ran if not r.passed
+        ],
+        "skipped_cases": [
+            {"id": r.case_id, "reason": r.failures[0]} for r in results if r.skipped
+        ],
     }

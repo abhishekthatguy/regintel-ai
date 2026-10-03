@@ -39,15 +39,22 @@ if st.button("Run golden suite", type="primary"):
                 f"API runs auth_mode={auth_mode} — paste a token on the main "
                 "page first, or cases will all fail with 401."
             )
+        me_id = None
+        if token:
+            try:
+                me_id = client.get("/v1/auth/me").json().get("employee_id")
+            except Exception:
+                pass
         progress = st.progress(0.0, text="Running cases…")
-        results = run_all(client)
+        results = run_all(client, effective_employee=me_id)
         progress.progress(1.0, text="Done")
 
     summary = summarize(results)
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Cases", summary["total"])
     c2.metric("Passed", summary["passed"])
     c3.metric("Pass rate", f"{summary['pass_rate']:.0%}")
+    c4.metric("Skipped", summary["skipped"])
 
     if summary["failed"]:
         st.error("Failed cases")
@@ -56,7 +63,12 @@ if st.button("Run golden suite", type="primary"):
                 for msg in f["failures"]:
                     st.write("-", msg)
     else:
-        st.success("All cases passed")
+        st.success("All executed cases passed")
+
+    if summary["skipped_cases"]:
+        st.info("Skipped cases")
+        for s in summary["skipped_cases"]:
+            st.caption(f"⏭ {s['id']} — {s['reason']}")
 
     with st.expander("Per-case detail"):
         st.json([
